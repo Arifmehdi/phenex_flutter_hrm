@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
 
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
+
+  @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  bool _isSidebarOpen = true;
 
   @override
   Widget build(BuildContext context) {
@@ -10,11 +17,13 @@ class DashboardPage extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: const Color(0xFF3A3A3A),
         elevation: 0,
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu, color: Colors.white),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
+        leading: IconButton(
+          icon: const Icon(Icons.menu, color: Colors.white),
+          onPressed: () {
+            setState(() {
+              _isSidebarOpen = !_isSidebarOpen;
+            });
+          },
         ),
         title: const Text(
           'BS',
@@ -29,12 +38,10 @@ class DashboardPage extends StatelessWidget {
           _buildUserArea(),
         ],
       ),
-      drawer: const Drawer(
-        backgroundColor: Color(0xFF3A3A3A),
-        child: SidebarWidget(),
-      ),
       body: Row(
         children: [
+          // Sidebar
+          if (_isSidebarOpen) const SidebarWidget(),
           // Main Content
           Expanded(
             child: Container(
@@ -113,8 +120,40 @@ class DashboardPage extends StatelessWidget {
   }
 }
 
-class SidebarWidget extends StatelessWidget {
+class SidebarWidget extends StatefulWidget {
   const SidebarWidget({super.key});
+
+  @override
+  State<SidebarWidget> createState() => _SidebarWidgetState();
+}
+
+class _SidebarWidgetState extends State<SidebarWidget> {
+  DateTime _currentDate = DateTime.now();
+
+  final List<String> _months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  void _previousMonth() {
+    setState(() {
+      _currentDate = DateTime(_currentDate.year, _currentDate.month - 1);
+    });
+  }
+
+  void _nextMonth() {
+    setState(() {
+      _currentDate = DateTime(_currentDate.year, _currentDate.month + 1);
+    });
+  }
+
+  int _daysInMonth(DateTime date) {
+    return DateTime(date.year, date.month + 1, 0).day;
+  }
+
+  int _firstWeekdayOfMonth(DateTime date) {
+    return DateTime(date.year, date.month, 1).weekday % 7;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -142,14 +181,27 @@ class SidebarWidget extends StatelessWidget {
   }
 
   Widget _buildCalendar() {
+    int days = _daysInMonth(_currentDate);
+    int startWeekday = _firstWeekdayOfMonth(_currentDate);
+    DateTime today = DateTime.now();
+
     return Column(
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
-            Icon(Icons.arrow_left, color: Colors.grey, size: 18),
-            Text('February 2026', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-            Icon(Icons.arrow_right, color: Colors.grey, size: 18),
+          children: [
+            InkWell(
+              onTap: _previousMonth,
+              child: const Icon(Icons.arrow_left, color: Colors.grey, size: 18),
+            ),
+            Text(
+              '${_months[_currentDate.month - 1]} ${_currentDate.year}',
+              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            InkWell(
+              onTap: _nextMonth,
+              child: const Icon(Icons.arrow_right, color: Colors.grey, size: 18),
+            ),
           ],
         ),
         const SizedBox(height: 10),
@@ -159,9 +211,10 @@ class SidebarWidget extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           children: [
             ...['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => Center(child: Text(d, style: const TextStyle(color: Colors.grey, fontSize: 11)))),
-            ...List.generate(28, (index) {
+            ...List.generate(startWeekday, (index) => const SizedBox.shrink()),
+            ...List.generate(days, (index) {
               int day = index + 1;
-              bool isToday = day == 26;
+              bool isToday = day == today.day && _currentDate.month == today.month && _currentDate.year == today.year;
               return Center(
                 child: Container(
                   width: 24,

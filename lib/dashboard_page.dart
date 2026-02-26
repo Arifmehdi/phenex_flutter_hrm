@@ -8,7 +8,7 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  bool _isSidebarOpen = true;
+  bool _isSidebarOpen = false;
 
   @override
   Widget build(BuildContext context) {
@@ -97,24 +97,56 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildStatCards() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: const [
-        StatCard(icon: Icons.bar_chart, label: 'Attendance', value: '0'),
-        SizedBox(width: 20),
-        StatCard(icon: Icons.bar_chart, label: 'Leave', value: '0'),
-        SizedBox(width: 20),
-        StatCard(icon: Icons.bar_chart, label: 'Absent', value: '0'),
-      ],
-    );
+    final List<Widget> cards = [
+      const StatCard(
+        icon: Icons.how_to_reg,
+        label: 'Attendance',
+        value: '0',
+        color: Colors.blue,
+      ),
+      const StatCard(
+        icon: Icons.directions_walk,
+        label: 'Leave',
+        value: '0',
+        color: Colors.orange,
+      ),
+      const StatCard(
+        icon: Icons.event_busy,
+        label: 'Absent',
+        value: '0',
+        color: Colors.red,
+      ),
+    ];
+
+    if (_isSidebarOpen) {
+      return Column(
+        children: [
+          cards[0],
+          const SizedBox(height: 12),
+          cards[1],
+          const SizedBox(height: 12),
+          cards[2],
+        ],
+      );
+    } else {
+      return Row(
+        children: [
+          Expanded(child: cards[0]),
+          const SizedBox(width: 12),
+          Expanded(child: cards[1]),
+          const SizedBox(width: 12),
+          Expanded(child: cards[2]),
+        ],
+      );
+    }
   }
 
   Widget _buildTablesRow() {
-    return Row(
+    return Column(
       children: const [
-        Expanded(child: TableCard(title: 'Top most punctual employee')),
-        SizedBox(width: 20),
-        Expanded(child: TableCard(title: 'Top most delayed employee')),
+        TableCard(title: 'Top most punctual employee'),
+        SizedBox(height: 20),
+        TableCard(title: 'Top most delayed employee'),
       ],
     );
   }
@@ -163,10 +195,54 @@ class _SidebarWidgetState extends State<SidebarWidget> {
       child: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          _buildMenuItem('Academy', badge: 8),
-          _buildMenuItem('Dashboard', active: true, hasArrow: true),
-          _buildMenuItem('Admin', badge: 8),
-          _buildMenuItem('HRM', badge: 4, hasArrow: true),
+          const MegaMenuItem(
+            label: 'Dashboard',
+            active: true,
+            hasArrow: true,
+            children: [
+              MegaMenuItem(label: 'Overview'),
+              MegaMenuItem(label: 'Analytics'),
+            ],
+          ),
+          const MegaMenuItem(
+            label: 'Admin',
+            badge: 8,
+            children: [
+              MegaMenuItem(label: 'User Management'),
+              MegaMenuItem(
+                label: 'Settings',
+                children: [
+                  MegaMenuItem(label: 'General'),
+                  MegaMenuItem(label: 'Security'),
+                ],
+              ),
+            ],
+          ),
+          const MegaMenuItem(
+            label: 'Employee',
+            children: [
+              MegaMenuItem(label: 'Employee List'),
+              MegaMenuItem(label: 'Employee Type'),
+              MegaMenuItem(label: 'Attendance'),
+              MegaMenuItem(label: 'Leave Application'),
+              MegaMenuItem(label: 'Shift Maping'),
+              MegaMenuItem(label: 'Employee Loan'),
+            ],
+          ),
+          const MegaMenuItem(
+            label: 'Payroll',
+            children: [
+              MegaMenuItem(label: 'Salary Structure'),
+              MegaMenuItem(label: 'Salary Sheet'),
+            ],
+          ),
+          const MegaMenuItem(
+            label: 'Leave',
+            children: [
+              MegaMenuItem(label: 'Leave Settings'),
+              MegaMenuItem(label: 'Leave Management'),
+            ],
+          ),
           const Divider(color: Color(0xFF555555), height: 32),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -237,34 +313,114 @@ class _SidebarWidgetState extends State<SidebarWidget> {
       ],
     );
   }
+}
 
-  Widget _buildMenuItem(String label, {int? badge, bool active = false, bool hasArrow = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: active ? const Color(0xFF4A4A4A) : Colors.transparent,
-        border: Border(left: BorderSide(color: active ? Colors.red : Colors.transparent, width: 3)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(color: Color(0xFF8BCFEA), fontSize: 13, fontWeight: FontWeight.w600)),
-          Row(
-            children: [
-              if (badge != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
-                  decoration: BoxDecoration(color: const Color(0xFF555555), borderRadius: BorderRadius.circular(10)),
-                  child: Text(badge.toString(), style: const TextStyle(color: Colors.white, fontSize: 11)),
+class MegaMenuItem extends StatefulWidget {
+  final String label;
+  final int? badge;
+  final bool active;
+  final bool hasArrow;
+  final List<MegaMenuItem> children;
+  final int level;
+
+  const MegaMenuItem({
+    super.key,
+    required this.label,
+    this.badge,
+    this.active = false,
+    this.hasArrow = false,
+    this.children = const [],
+    this.level = 0,
+  });
+
+  @override
+  State<MegaMenuItem> createState() => _MegaMenuItemState();
+}
+
+class _MegaMenuItemState extends State<MegaMenuItem> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    bool hasChildren = widget.children.isNotEmpty;
+
+    return Column(
+      children: [
+        InkWell(
+          onTap: () {
+            if (hasChildren) {
+              setState(() {
+                _isExpanded = !_isExpanded;
+              });
+            }
+          },
+          child: Container(
+            padding: EdgeInsets.only(
+              left: 16.0 + (widget.level * 12.0),
+              right: 16.0,
+              top: 10,
+              bottom: 10,
+            ),
+            decoration: BoxDecoration(
+              color: widget.active ? const Color(0xFF4A4A4A) : Colors.transparent,
+              border: Border(
+                left: BorderSide(
+                  color: (widget.active && widget.level == 0) ? Colors.red : Colors.transparent,
+                  width: 3,
                 ),
-              if (hasArrow) ...[
-                const SizedBox(width: 4),
-                const Icon(Icons.arrow_right, color: Color(0xFF8BCFEA), size: 14),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.label,
+                    style: TextStyle(
+                      color: widget.level == 0 ? const Color(0xFF8BCFEA) : Colors.white70,
+                      fontSize: widget.level == 0 ? 13 : 12,
+                      fontWeight: widget.level == 0 ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                ),
+                Row(
+                  children: [
+                    if (widget.badge != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF555555),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          widget.badge.toString(),
+                          style: const TextStyle(color: Colors.white, fontSize: 11),
+                        ),
+                      ),
+                    if (hasChildren)
+                      Icon(
+                        _isExpanded ? Icons.arrow_drop_down : Icons.arrow_right,
+                        color: widget.level == 0 ? const Color(0xFF8BCFEA) : Colors.white70,
+                        size: 14,
+                      )
+                    else if (widget.hasArrow)
+                      const Icon(Icons.arrow_right, color: Color(0xFF8BCFEA), size: 14),
+                  ],
+                ),
               ],
-            ],
+            ),
           ),
-        ],
-      ),
+        ),
+        if (_isExpanded && hasChildren)
+          ...widget.children.map((child) => MegaMenuItem(
+                label: child.label,
+                children: child.children,
+                level: widget.level + 1,
+                active: child.active,
+                hasArrow: child.hasArrow,
+                badge: child.badge,
+              )),
+      ],
     );
   }
 }
@@ -306,26 +462,60 @@ class StatCard extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
+  final Color color;
 
-  const StatCard({super.key, required this.icon, required this.label, required this.value});
+  const StatCard({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 180,
-      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(color: const Color(0xFFDDDDDD)),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 28, color: const Color(0xFF999999)),
-          const SizedBox(height: 6),
-          Text(label, style: const TextStyle(color: Color(0xFF666666), fontSize: 13)),
-          const SizedBox(height: 4),
-          Text(value, style: const TextStyle(color: Color(0xFF333333), fontSize: 18, fontWeight: FontWeight.bold)),
+          Row(
+            children: [
+              Icon(icon, color: color, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Color(0xFF333333),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF888888),
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );

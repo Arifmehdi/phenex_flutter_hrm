@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dashboard_page.dart';
+import 'employee_panel.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -10,6 +11,7 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   bool _rememberMe = false;
+  final TextEditingController _usernameController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
@@ -95,8 +97,9 @@ class _LoginPageState extends State<LoginPage> {
                             children: [
                               _buildLabelWithLink('Username or Phone No.', 'Forgot username?'),
                               const SizedBox(height: 6),
-                              const TextField(
-                                decoration: InputDecoration(
+                              TextField(
+                                controller: _usernameController,
+                                decoration: const InputDecoration(
                                   isDense: true,
                                   contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                   border: OutlineInputBorder(),
@@ -153,10 +156,17 @@ class _LoginPageState extends State<LoginPage> {
                                   ),
                                   OutlinedButton(
                                     onPressed: () {
-                                      Navigator.pushReplacement(
-                                        context,
-                                        MaterialPageRoute(builder: (context) => const DashboardPage()),
-                                      );
+                                      if (_usernameController.text.toLowerCase() == 'admin') {
+                                        Navigator.pushReplacement(
+                                          context,
+                                          MaterialPageRoute(builder: (context) => const DashboardPage()),
+                                        );
+                                      } else {
+                                        Navigator.pushReplacement(
+                                          context,
+                                          MaterialPageRoute(builder: (context) => const EmployeePanel()),
+                                        );
+                                      }
                                     },
                                     style: OutlinedButton.styleFrom(
                                       side: const BorderSide(color: Colors.black45),

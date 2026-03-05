@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'login_page.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -9,6 +11,23 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   bool _isSidebarOpen = false;
+
+  Future<void> _handleLogout() async {
+    try {
+      // Call logout API as mentioned in logout.txt
+      await http.get(Uri.parse('https://www.bs-org.com/index.php/api/authentication/flutter_logout'));
+    } catch (e) {
+      // Log error if needed
+    } finally {
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+          (route) => false,
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -90,7 +109,12 @@ class _DashboardPageState extends State<DashboardPage> {
           const SizedBox(width: 18),
           const Icon(Icons.search, color: Colors.grey, size: 18),
           const SizedBox(width: 18),
-          const Icon(Icons.exit_to_app, color: Colors.grey, size: 18),
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            icon: const Icon(Icons.exit_to_app, color: Colors.grey, size: 18),
+            onPressed: _handleLogout,
+          ),
         ],
       ),
     );
@@ -554,5 +578,3 @@ class TableCard extends StatelessWidget {
     );
   }
 }
-
-

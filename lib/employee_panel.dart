@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'login_page.dart';
 
 class EmployeePanel extends StatefulWidget {
   const EmployeePanel({super.key});
@@ -22,6 +24,23 @@ class _EmployeePanelState extends State<EmployeePanel> {
     });
   }
 
+  Future<void> _handleLogout() async {
+    try {
+      // Call logout API as mentioned in logout.txt
+      await http.get(Uri.parse('https://www.bs-org.com/index.php/api/authentication/flutter_logout'));
+    } catch (e) {
+      // Log error if needed
+    } finally {
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+          (route) => false,
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -36,9 +55,7 @@ class _EmployeePanelState extends State<EmployeePanel> {
           ),
           IconButton(
             icon: const Icon(Icons.exit_to_app, color: Colors.white),
-            onPressed: () {
-              Navigator.pop(context);
-            },
+            onPressed: _handleLogout,
           ),
         ],
       ),

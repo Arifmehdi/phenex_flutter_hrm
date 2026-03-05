@@ -44,18 +44,19 @@ class _LoginPageState extends State<LoginPage> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
-          // If the phone number is 01717956334, go to Admin Panel, otherwise Employee Panel
-          if (phone == '01717956334') {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const DashboardPage()),
-            );
-          } else {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const EmployeePanel()),
-            );
-          }
+          final userData = data['data']['user'];
+          final menuData = data['data']['menu'];
+
+          // Navigate to DashboardPage for all successful logins with dynamic menu
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DashboardPage(
+                userData: userData,
+                menuData: menuData,
+              ),
+            ),
+          );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(data['message'] ?? 'Login failed')),
@@ -225,6 +226,22 @@ class _LoginPageState extends State<LoginPage> {
                                                 style: TextStyle(fontSize: 13, color: Colors.grey),
                                               ),
                                             ],
+                                          ),
+                                        ),
+                                        GestureDetector(
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(builder: (context) => const EmployeePanel()),
+                                            );
+                                          },
+                                          child: const Text(
+                                            'Employee',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: Color(0xFF2299CC),
+                                              decoration: TextDecoration.underline,
+                                            ),
                                           ),
                                         ),
                                       ],

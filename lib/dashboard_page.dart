@@ -3,7 +3,14 @@ import 'package:http/http.dart' as http;
 import 'login_page.dart';
 
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key});
+  final Map<String, dynamic> userData;
+  final List<dynamic> menuData;
+
+  const DashboardPage({
+    super.key,
+    required this.userData,
+    required this.menuData,
+  });
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -60,7 +67,7 @@ class _DashboardPageState extends State<DashboardPage> {
       body: Row(
         children: [
           // Sidebar
-          if (_isSidebarOpen) const SidebarWidget(),
+          if (_isSidebarOpen) SidebarWidget(menuData: widget.menuData),
           // Main Content
           Expanded(
             child: Container(
@@ -101,7 +108,10 @@ class _DashboardPageState extends State<DashboardPage> {
             backgroundImage: NetworkImage('https://i.pravatar.cc/30?img=12'),
           ),
           const SizedBox(width: 8),
-          const Text('Sultan Ahmmed ▾', style: TextStyle(color: Color(0xFFDDDDDD), fontSize: 14)),
+          Text(
+            '${widget.userData['name'] ?? 'User'} ▾',
+            style: const TextStyle(color: Color(0xFFDDDDDD), fontSize: 14),
+          ),
           const SizedBox(width: 18),
           const Icon(Icons.settings, color: Colors.grey, size: 18),
           const SizedBox(width: 18),
@@ -177,7 +187,9 @@ class _DashboardPageState extends State<DashboardPage> {
 }
 
 class SidebarWidget extends StatefulWidget {
-  const SidebarWidget({super.key});
+  final List<dynamic> menuData;
+
+  const SidebarWidget({super.key, required this.menuData});
 
   @override
   State<SidebarWidget> createState() => _SidebarWidgetState();
@@ -211,6 +223,16 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     return DateTime(date.year, date.month, 1).weekday % 7;
   }
 
+  List<MegaMenuItem> _buildMenuItems(List<dynamic> data) {
+    return data.map((item) {
+      final children = item['children'] as List<dynamic>? ?? [];
+      return MegaMenuItem(
+        label: item['name'] ?? '',
+        children: _buildMenuItems(children),
+      );
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -219,54 +241,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
       child: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          const MegaMenuItem(
-            label: 'Dashboard',
-            active: true,
-            hasArrow: true,
-            children: [
-              MegaMenuItem(label: 'Overview'),
-              MegaMenuItem(label: 'Analytics'),
-            ],
-          ),
-          const MegaMenuItem(
-            label: 'Admin',
-            badge: 8,
-            children: [
-              MegaMenuItem(label: 'User Management'),
-              MegaMenuItem(
-                label: 'Settings',
-                children: [
-                  MegaMenuItem(label: 'General'),
-                  MegaMenuItem(label: 'Security'),
-                ],
-              ),
-            ],
-          ),
-          const MegaMenuItem(
-            label: 'Employee',
-            children: [
-              MegaMenuItem(label: 'Employee List'),
-              MegaMenuItem(label: 'Employee Type'),
-              MegaMenuItem(label: 'Attendance'),
-              MegaMenuItem(label: 'Leave Application'),
-              MegaMenuItem(label: 'Shift Maping'),
-              MegaMenuItem(label: 'Employee Loan'),
-            ],
-          ),
-          const MegaMenuItem(
-            label: 'Payroll',
-            children: [
-              MegaMenuItem(label: 'Salary Structure'),
-              MegaMenuItem(label: 'Salary Sheet'),
-            ],
-          ),
-          const MegaMenuItem(
-            label: 'Leave',
-            children: [
-              MegaMenuItem(label: 'Leave Settings'),
-              MegaMenuItem(label: 'Leave Management'),
-            ],
-          ),
+          ..._buildMenuItems(widget.menuData),
           const Divider(color: Color(0xFF555555), height: 32),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),

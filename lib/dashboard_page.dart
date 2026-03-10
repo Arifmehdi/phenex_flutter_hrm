@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'login_page.dart';
+import 'session_manager.dart';
+import 'employee_list_page.dart';
 
 class DashboardPage extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -21,6 +23,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> _handleLogout() async {
     try {
+      // Clear local session
+      await SessionManager.clearSession();
       // Call logout API as mentioned in logout.txt
       await http.get(Uri.parse('https://www.bs-org.com/index.php/api/authentication/flutter_logout'));
     } catch (e) {
@@ -228,6 +232,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
       final children = item['children'] as List<dynamic>? ?? [];
       return MegaMenuItem(
         label: item['name'] ?? '',
+        link: item['link'],
         children: _buildMenuItems(children),
       );
     }).toList();
@@ -316,6 +321,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
 
 class MegaMenuItem extends StatefulWidget {
   final String label;
+  final String? link;
   final int? badge;
   final bool active;
   final bool hasArrow;
@@ -325,6 +331,7 @@ class MegaMenuItem extends StatefulWidget {
   const MegaMenuItem({
     super.key,
     required this.label,
+    this.link,
     this.badge,
     this.active = false,
     this.hasArrow = false,
@@ -351,6 +358,20 @@ class _MegaMenuItemState extends State<MegaMenuItem> {
               setState(() {
                 _isExpanded = !_isExpanded;
               });
+            } else {
+              // Navigation logic for Employee List
+              if (widget.label.toLowerCase().contains('employee list') || 
+                  widget.link == 'hrm/employeeList') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const EmployeeListPage()),
+                );
+              } else {
+                // Other links could be handled here
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Clicked: ${widget.label}')),
+                );
+              }
             }
           },
           child: Container(
@@ -413,6 +434,7 @@ class _MegaMenuItemState extends State<MegaMenuItem> {
         if (_isExpanded && hasChildren)
           ...widget.children.map((child) => MegaMenuItem(
                 label: child.label,
+                link: child.link,
                 children: child.children,
                 level: widget.level + 1,
                 active: child.active,

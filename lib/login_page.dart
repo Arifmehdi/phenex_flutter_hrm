@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dashboard_page.dart';
 import 'employee_panel.dart';
+import 'session_manager.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -18,12 +19,12 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _passwordController = TextEditingController();
 
   Future<void> _handleLogin() async {
-    final phone = _usernameController.text.trim();
+    final identifier = _usernameController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (phone.isEmpty || password.isEmpty) {
+    if (identifier.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter phone and password')),
+        const SnackBar(content: Text('Please enter username/phone and password')),
       );
       return;
     }
@@ -36,7 +37,7 @@ class _LoginPageState extends State<LoginPage> {
       final response = await http.post(
         Uri.parse('https://www.bs-org.com/index.php/api/authentication/flutter_login'),
         body: {
-          'phone': phone,
+          'phone': identifier,
           'password': password,
         },
       );
@@ -46,17 +47,29 @@ class _LoginPageState extends State<LoginPage> {
         if (data['success'] == true) {
           final userData = data['data']['user'];
           final menuData = data['data']['menu'];
+          final token = data['data']['token'] ?? '';
+          final orgId = userData['organization']['id'];
+          final userId = userData['id'];
+
+          // Save session
+          await SessionManager.saveSession(
+            orgId: orgId is int ? orgId : int.parse(orgId.toString()),
+            userId: userId is int ? userId : int.parse(userId.toString()),
+            token: token,
+          );
 
           // Navigate to DashboardPage for all successful logins with dynamic menu
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => DashboardPage(
-                userData: userData,
-                menuData: menuData,
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => DashboardPage(
+                  userData: userData,
+                  menuData: menuData,
+                ),
               ),
-            ),
-          );
+            );
+          }
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(data['message'] ?? 'Login failed')),
@@ -167,11 +180,11 @@ class _LoginPageState extends State<LoginPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    _buildLabelWithLink('Phone No.', 'Forgot username?'),
+                                    _buildLabelWithLink('Username / Phone', 'Forgot username?'),
                                     const SizedBox(height: 6),
                                     TextField(
                                       controller: _usernameController,
-                                      keyboardType: TextInputType.phone,
+                                      keyboardType: TextInputType.text,
                                       decoration: const InputDecoration(
                                         isDense: true,
                                         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),

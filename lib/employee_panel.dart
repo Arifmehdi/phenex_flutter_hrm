@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
+import 'dart:io';
+import 'dart:async';
 import 'login_page.dart';
 
 class EmployeePanel extends StatefulWidget {
@@ -83,8 +87,101 @@ class _EmployeePanelState extends State<EmployeePanel> {
   }
 }
 
-class AttendanceScreen extends StatelessWidget {
+class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
+
+  @override
+  State<AttendanceScreen> createState() => _AttendanceScreenState();
+}
+
+class _AttendanceScreenState extends State<AttendanceScreen> {
+  String _checkInTime = '--:--';
+  String _checkOutTime = '--:--';
+  String _workingHours = '00:00';
+  DateTime? _checkInDateTime;
+  bool _isCheckedIn = false;
+  bool _isCheckedOut = false;
+  late Timer _timer;
+  DateTime _currentTime = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        _currentTime = DateTime.now();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  Future<void> _takeCheckInPicture() async {
+    final ImagePicker picker = ImagePicker();
+    try {
+      final XFile? photo = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.front,
+      );
+
+      if (photo != null) {
+        final now = DateTime.now();
+        setState(() {
+          _checkInDateTime = now;
+          _checkInTime = DateFormat('hh:mm a').format(now);
+          _isCheckedIn = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Check-in successful!')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error taking picture: $e')),
+      );
+    }
+  }
+
+  Future<void> _takeCheckOutPicture() async {
+    if (!_isCheckedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please check in first!')),
+      );
+      return;
+    }
+
+    final ImagePicker picker = ImagePicker();
+    try {
+      final XFile? photo = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.front,
+      );
+
+      if (photo != null) {
+        final now = DateTime.now();
+        final duration = now.difference(_checkInDateTime!);
+        final hours = duration.inHours.toString().padLeft(2, '0');
+        final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
+
+        setState(() {
+          _checkOutTime = DateFormat('hh:mm a').format(now);
+          _workingHours = '$hours:$minutes';
+          _isCheckedOut = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Check-out successful!')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error taking picture: $e')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -114,22 +211,32 @@ class AttendanceScreen extends StatelessWidget {
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            const Text(
-              'March 02, 2026',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+            Text(
+              DateFormat('MMMM dd, yyyy').format(_currentTime),
+              style: const TextStyle(fontSize: 16, color: Colors.grey),
             ),
             const SizedBox(height: 10),
-            const Text(
-              '09:00 AM',
-              style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF2E4560)),
+            Text(
+              DateFormat('hh:mm:ss a').format(_currentTime),
+              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF2E4560)),
             ),
             const Text('Current Time'),
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildActionButton(Icons.login, 'Check In', Colors.green, () {}),
-                _buildActionButton(Icons.logout, 'Check Out', Colors.orange, () {}),
+                _buildActionButton(
+                  Icons.login,
+                  'Check In',
+                  Colors.green,
+                  _isCheckedIn ? null : _takeCheckInPicture,
+                ),
+                _buildActionButton(
+                  Icons.logout,
+                  'Check Out',
+                  Colors.orange,
+                  (!_isCheckedIn || _isCheckedOut) ? null : _takeCheckOutPicture,
+                ),
               ],
             ),
             const SizedBox(height: 20),
@@ -138,9 +245,9 @@ class AttendanceScreen extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildTimeInfo('Check In', '--:--'),
-                _buildTimeInfo('Check Out', '--:--'),
-                _buildTimeInfo('Working Hr', '00:00'),
+                _buildTimeInfo('Check In', _checkInTime),
+                _buildTimeInfo('Check Out', _checkOutTime),
+                _buildTimeInfo('Working Hr', _workingHours),
               ],
             ),
           ],
@@ -149,20 +256,26 @@ class AttendanceScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButton(IconData icon, String label, Color color, VoidCallback onPressed) {
+  Widget _buildActionButton(IconData icon, String label, Color color, VoidCallback? onPressed) {
     return Column(
       children: [
         ElevatedButton(
           onPressed: onPressed,
           style: ElevatedButton.styleFrom(
-            backgroundColor: color,
+            backgroundColor: onPressed == null ? Colors.grey : color,
             shape: const CircleBorder(),
             padding: const EdgeInsets.all(16),
           ),
           child: Icon(icon, color: Colors.white, size: 28),
         ),
         const SizedBox(height: 8),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+        Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.w500,
+            color: onPressed == null ? Colors.grey : Colors.black,
+          ),
+        ),
       ],
     );
   }

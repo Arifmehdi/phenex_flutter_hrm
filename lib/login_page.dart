@@ -81,8 +81,14 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } catch (e) {
+      String errorMessage = 'An error occurred. Please try again.';
+      if (e.toString().contains('SocketException') || e.toString().contains('host lookup')) {
+        errorMessage = 'No internet connection or server is unreachable. Please check your network.';
+      } else {
+        errorMessage = 'Error: $e';
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(content: Text(errorMessage)),
       );
     } finally {
       if (mounted) {

@@ -1,0 +1,146 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+require APPPATH . 'libraries/REST_Controller.php';
+use Restserver\Libraries\REST_Controller;
+
+class Menu extends REST_Controller {
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->load->database();
+    }
+
+    /**
+     * Endpoint:
+     * GET /index.php/api/menu/flutter_menu
+     */
+    public function flutter_menu_get()
+    {
+        header_remove('Set-Cookie');
+        header('Access-Control-Allow-Origin: *');
+        header('Access-Control-Allow-Methods: GET, OPTIONS');
+        header('Access-Control-Allow-Headers: X-Requested-With, Content-Type, Authorization');
+        header('Content-Type: application/json');
+
+        // Handle preflight
+        if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+            $this->response(NULL, REST_Controller::HTTP_OK);
+            exit();
+        }
+
+        // 🔐 Validate token (using your existing function)
+        $user = $this->validate_token();
+
+        if (!$user) {
+            return $this->response([
+                'success' => false,
+                'message' => 'Unauthorized'
+            ], REST_Controller::HTTP_UNAUTHORIZED);
+        }
+
+        // 📌 Get dynamic menu
+        $menu = $this->get_user_menu($user->id);
+
+        return $this->response([
+            'success' => true,
+            'message' => 'Menu loaded successfully',
+            'data' => $menu
+        ], REST_Controller::HTTP_OK);
+    }
+
+
+    /**
+     * Get all accessible modules in ONE query
+     */
+    private function get_user_menu($user_id)
+    {
+        $modules = $this->db
+            ->select('m.id, m.name, m.root, m.link, m.icon, m.sequence')
+            ->from('z_sys_module m')
+            ->join('z_sys_user_access a', 'a.module_id = m.id')
+            ->where('a.user_id', $user_id)
+            ->group_start()
+                ->where('a.mod_add', 1)
+                ->or_where('a.mod_edit', 1)
+                ->or_where('a.mod_delete', 1)
+                ->or_where('a.mod_view', 1)
+            ->group_end()
+            ->where('m.status', 1)
+            ->order_by('m.sequence', 'ASC')
+            ->get()
+            ->result();
+
+        if (!$modules) {
+            return [];
+        }
+
+        return $this->build_tree($modules);
+    }
+
+
+    /**
+     * Recursive Tree Builder
+     * root = parent ID
+     */
+    private function build_tree($elements, $parent_id = 0)
+    {
+        $branch = [];
+
+        foreach ($elements as $element) {
+
+            if ((int)$element->root === (int)$parent_id) {
+
+                $children = $this->build_tree($elements, $element->id);
+
+                $branch[] = [
+                    'id' => (int)$element->id,
+                    'name' => $element->name,
+                    'icon' => $element->icon,
+                    'link' => $element->link,
+                    'children' => $children
+                ];
+            }
+        }
+
+        return $branch;
+    }
+
+
+    /**
+     * Use your existing token validation method.
+     * If it's in another controller, move it to a helper or MY_Controller.
+     */
+    private function validate_token()
+    {
+        $headers = $this->input->request_headers();
+
+        if (!isset($headers['Authorization'])) {
+            return false;
+        }
+
+        $token = str_replace('Bearer ', '', $headers['Authorization']);
+
+        // ⚠️ This assumes you already store token somewhere
+        $token_data = $this->db->where('token', $token)
+                               ->get('api_tokens')
+                               ->row();
+
+        if (!$token_data) {
+            return false;
+        }
+
+        return $this->db->where('id', $token_data->user_id)
+                        ->where('status', 1)
+                        ->get('z_sys_user')
+                        ->row();
+    }
+
+}
+
+
+menu logic is here 
+
+GET https://www.bs-org.com/index.php/api/menu/flutter_menu
+

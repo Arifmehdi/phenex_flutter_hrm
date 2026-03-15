@@ -1,0 +1,255 @@
+https://www.bs-org.com/index.php/api/authentication/employee_list?orgID=106
+
+employee api 
+
+
+and this orgid get when login [data > organization > id ]
+
+
+login logic 
+-------------------
+https://www.bs-org.com/index.php/api/authentication/flutter_login
+
+{
+	"success": true,
+	"message": "Login successful",
+	"data": {
+		"user": {
+			"id": 1035,
+			"name": "A. K. Ziaul Ahmed",
+			"org_name": "ICON2",
+			"phone": "01717956334",
+			"employee_id": "",
+			"role": {
+				"level": 3,
+				"name": "Manager",
+				"department_id": 2,
+				"designation_id": 3
+			},
+			"organization": {
+				"id": 106,
+				"outlet_id": 1,
+				"home_page": 1
+			},
+			"permissions": {
+				"can_manage_orders": true,
+				"can_deliver": false,
+				"can_view_reports": true
+			}
+		},
+		"token": "eyJ1c2VyX2lkIjoiMTAzNSIsInBob25lIjoiMDE3MTc5NTYzMzQiLCJ0aW1lc3RhbXAiOjE3NzI5NDI3NTYsImV4cGlyeSI6MTc3MzAyOTE1Nn0=",
+		"expires_in": 86400,
+		"menu": [
+			{
+				"id": "169",
+				"name": "Admin",
+				"link": null,
+				"icon": null,
+				"root": "0",
+				"sequence": "4",
+				"children": [
+					{
+						"id": "174",
+						"name": "Shifting",
+						"link": "hrm/shifting",
+						"icon": null,
+						"root": "169",
+						"sequence": null,
+						"children": []
+					},
+					{
+						"id": "175",
+						"name": "Section",
+						"link": "hrm/section",
+						"icon": null,
+						"root": "169",
+						"sequence": null,
+						"children": []
+					},
+					{
+						"id": "176",
+						"name": "Department",
+						"link": "hrm/department",
+						"icon": null,
+						"root": "169",
+						"sequence": null,
+						"children": []
+					},
+					{
+						"id": "177",
+						"name": "Designation",
+						"link": "hrm/designation",
+						"icon": null,
+						"root": "169",
+						"sequence": null,
+						"children": []
+					},
+					{
+						"id": "178",
+						"name": "Late Attendance",
+						"link": "hrm/absent",
+						"icon": null,
+						"root": "169",
+						"sequence": null,
+						"children": []
+					},
+					{
+						"id": "179",
+						"name": "Overtime Administration",
+						"link": "hrm/overtimeAdministration",
+						"icon": null,
+						"root": "169",
+						"sequence": null,
+						"children": []
+					},
+					{
+						"id": "180",
+						"name": "Salary Grade",
+						"link": "hrm/salaryGrade",
+						"icon": null,
+						"root": "169",
+						"sequence": null,
+						"children": []
+					},
+					{
+						"id": "435",
+						"name": "Holiday Mapping",
+						"link": "hrm/holidayMapping",
+						"icon": null,
+						"root": "169",
+						"sequence": null,
+						"children": []
+					}
+				]
+			},
+			{
+				"id": "170",
+				"name": "HRM",
+				"link": null,
+				"icon": null,
+				"root": "0",
+				"sequence": "5",
+				"children": [
+					{
+						"id": "555",
+						"name": "HRM Dashboard",
+						"link": "hrm/employeeDashboard",
+						"icon": null,
+						"root": "170",
+						"sequence": "1",
+						"children": []
+					},
+					{
+						"id": "171",
+						"name": "Employees",
+						"link": "#",
+						"icon": null,
+						"root": "170",
+						"sequence": "2",
+						"children": [
+							{
+								"id": "182",
+								"name": "Employment Type",
+								"link": "hrm/employmentType",
+								"icon": null,
+								"root": "171",
+								"sequence": null,
+								"children": []
+							},
+
+
+https://www.bs-org.com/index.php/api/authentication/employee_list?orgID=$orgid
+
+employeee logic 
+-----------------------
+{
+	"success": true,
+	"message": "Employee list fetched",
+	"total": 7,
+	"data": [
+		{
+			"id": "192",
+			"employee_code": "103",
+			"employee_name": " A.K ZIAUL AHMED",
+			"employee_gender": "Male",
+			"contact": "01710000",
+			"email": "",
+			"image": "",
+			"designation_title": "ASST. MANAGER (A&C)",
+			"department_name": "Administration",
+			"section_title": null
+		},
+		{
+			"id": "189",
+			"employee_code": "102",
+			"employee_name": "MD AFTAB ALI",
+			"employee_gender": "Male",
+			"contact": "01710000",
+			"email": "",
+			"image": "",
+			"designation_title": "G.M",
+			"department_name": "Administration",
+			"section_title": null
+		},
+		{
+			"id": "190",
+			"employee_code": "11",
+			"employee_name": "MD AMINUL HOQUE ",
+			"employee_gender": "Male",
+			"contact": "01710000",
+			"email": "",
+			"image": "",
+			"designation_title": "HEAD OF AUDIT",
+			"department_name": "Accounts",
+			"section_title": null
+		},
+		{
+			"id": "191",
+			"employee_code": "566",
+			"employee_name": "MD. ASHRAFUL QUADIR",
+			"employee_gender": "Male",
+			"contact": "01710000",
+			"email": "",
+			"image": "",
+			"designation_title": "MANAGER COMMERCIAL",
+			"department_name": "Commercial ",
+			"section_title": null
+		},
+		{
+			"id": "193",
+			"employee_code": "104",
+			"employee_name": "MD. ATIQUR RAHMAN",
+			"employee_gender": "Male",
+			"contact": "01710000",
+			"email": "",
+			"image": "",
+			"designation_title": "EX.ACCOUNTS",
+			"department_name": "Accounts",
+			"section_title": null
+		},
+		{
+			"id": "194",
+			"employee_code": "109",
+			"employee_name": "MD. SHIFUSJAMAN RUBEL",
+			"employee_gender": "Male",
+			"contact": "01710000",
+			"email": "",
+			"image": "",
+			"designation_title": "Executive ",
+			"department_name": "Administration",
+			"section_title": null
+		},
+		{
+			"id": "188",
+			"employee_code": "101",
+			"employee_name": "MOHAMMAD NAJMUL HUDA",
+			"employee_gender": "Male",
+			"contact": "01710000",
+			"email": "",
+			"image": "",
+			"designation_title": "EMD",
+			"department_name": "Administration",
+			"section_title": null
+		}
+	]
+}

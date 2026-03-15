@@ -1,0 +1,398 @@
+public function flutter_login_post()
+{
+    header_remove('Set-Cookie');
+    header('Access-Control-Allow-Origin: *');
+    header('Access-Control-Allow-Methods: POST, OPTIONS');
+    header('Access-Control-Allow-Headers: X-Requested-With, Content-Type, Authorization');
+    header('Content-Type: application/json');
+
+    if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+        $this->response(NULL, REST_Controller::HTTP_OK);
+        exit();
+    }
+
+    $input_data = json_decode(file_get_contents("php://input"), true);
+
+    $phone = $input_data['phone'] ?? $this->post('phone');
+    $password = $input_data['password'] ?? $this->post('password');
+
+    if (empty($phone) || empty($password)) {
+        return $this->response([
+            'success' => false,
+            'message' => 'Phone number and password are required',
+            'data' => null,
+            'error_code' => 'MISSING_CREDENTIALS'
+        ], 400);
+    }
+
+    if (!$this->mobileNumber($phone)['status']) {
+        return $this->response([
+            'success' => false,
+            'message' => 'Invalid Bangladesh phone number format',
+            'data' => null,
+            'error_code' => 'INVALID_PHONE'
+        ], 400);
+    }
+
+    $result = $this->auth_model->user_login($phone, $password);
+
+    if (!$result) {
+        return $this->response([
+            'success' => false,
+            'message' => 'Invalid phone number or password',
+            'data' => null,
+            'error_code' => 'INVALID_CREDENTIALS'
+        ], 401);
+    }
+
+    // Logging
+    $this->utilities->insertData([
+        'user_id' => $result->id,
+        'date' => date("Y-m-d H:i:s"),
+        'log_status' => 1
+    ], 'z_sys_user_log');
+
+    $this->utilities->insertData([
+        'user_id' => $result->id,
+        'log_in' => 1,
+        'date' => date("Y-m-d H:i:s")
+    ], 'z_sys_user_logon');
+
+    // Organization
+    $org_name = '';
+    if (!empty($result->orgID)) {
+        $org = $this->utilities->findByAttribute('z_sys_org', ['id' => $result->orgID]);
+        if ($org && isset($org->org_name)) $org_name = $org->org_name;
+    }
+
+    // Role
+    $role_data = $this->determine_user_role($result);
+    $role_level = $role_data['level'] ?? 0;
+    $role_name = $role_data['name'] ?? 'Unknown';
+
+    // Token
+    $token = $this->generate_token($result->id, $phone);
+
+    $user_data = [
+        'id' => (int)$result->id,
+        'name' => $result->name ?? '',
+        'org_name' => $org_name,
+        'phone' => $result->phone ?? '',
+        'employee_id' => $result->employeeID ?? '',
+        'role' => [
+            'level' => $role_level,
+            'name' => $role_name,
+            'department_id' => (int)($result->deptID ?? 0),
+            'designation_id' => (int)($result->degID ?? 0),
+        ],
+        'organization' => [
+            'id' => (int)($result->orgID ?? 0),
+            'outlet_id' => (int)($result->outlet ?? 0),
+            'home_page' => (int)($result->indexPage ?? 0),
+        ],
+        'permissions' => [
+            'can_manage_orders' => in_array($role_level, [1,3]),
+            'can_deliver' => $role_level == 2,
+            'can_view_reports' => $role_level == 3,
+        ]
+    ];
+
+    // --- Nested Menu Function ---
+    function buildMenu($parentId, $user_id, $role_level, $db) {
+        $menu_list = $db->where(['root'=>$parentId,'status'=>1])->order_by('sequence','ASC')->get('z_sys_module')->result();
+        $menu_array = [];
+        foreach ($menu_list as $menu) {
+            $mod3 = (int)$db->query("SELECT COUNT(mod_level3) as cnt FROM view_user_module_access 
+                WHERE user_id=? AND mod_level3=? AND (mod_add=1 OR mod_edit=1 OR mod_delete=1 OR mod_view=1)", [$user_id, $menu->id])->row()->cnt ?? 0;
+            $mod2 = (int)$db->query("SELECT COUNT(mod_level3) as cnt FROM view_user_module_access 
+                WHERE user_id=? AND mod_level2=? AND (mod_add=1 OR mod_edit=1 OR mod_delete=1 OR mod_view=1)", [$user_id, $menu->id])->row()->cnt ?? 0;
+            $mod1 = (int)$db->query("SELECT COUNT(mod_level3) as cnt FROM view_user_module_access 
+                WHERE user_id=? AND mod_level1=? AND (mod_add=1 OR mod_edit=1 OR mod_delete=1 OR mod_view=1)", [$user_id, $menu->id])->row()->cnt ?? 0;
+
+            if($mod3>0 || $mod2>0 || $mod1>0 || $role_level==1){
+                $menu_array[] = [
+                    'id'=>$menu->id,
+                    'name'=>$menu->name,
+                    'link'=>$menu->link,
+                    'icon'=>$menu->icon,
+                    'children'=>buildMenu($menu->id, $user_id, $role_level, $db) // recursive
+                ];
+            }
+        }
+        return $menu_array;
+    }
+
+    $menu_response = buildMenu(0, $result->id, $role_level, $this->db);
+
+    $this->response([
+        'success'=>true,
+        'message'=>'Login successful',
+        'data'=>[
+            'user'=>$user_data,
+            'token'=>$token,
+            'expires_in'=>86400,
+            'menu'=>$menu_response
+        ],
+        'error_code'=>null
+    ], 200);
+}
+
+logic and api route 
+"https://www.bs-org.com/index.php/api/authentication/flutter_login" -- post method
+
+"{
+	"success": true,
+	"message": "Login successful",
+	"data": {
+		"user": {
+			"id": 1031,
+			"name": "Md. Tomis Uddin Shawon",
+			"org_name": "Pacific International",
+			"phone": "01911933192",
+			"employee_id": "",
+			"role": {
+				"level": 0,
+				"name": "Unknown",
+				"department_id": 3,
+				"designation_id": 3
+			},
+			"organization": {
+				"id": 103,
+				"outlet_id": 1,
+				"home_page": 393
+			},
+			"permissions": {
+				"can_manage_orders": false,
+				"can_deliver": false,
+				"can_view_reports": false
+			}
+		},
+		"token": "eyJ1c2VyX2lkIjoiMTAzMSIsInBob25lIjoiMDE5MTE5MzMxOTIiLCJ0aW1lc3RhbXAiOjE3NzI3NDYwODMsImV4cGlyeSI6MTc3MjgzMjQ4M30=",
+		"expires_in": 86400,
+		"menu": [
+			{
+				"id": "393",
+				"name": "Dashboard (I)",
+				"link": "dashboard/pharmaDashboard",
+				"icon": null,
+				"children": []
+			},
+			{
+				"id": "144",
+				"name": "Sales",
+				"link": "#",
+				"icon": "category.png",
+				"children": [
+					{
+						"id": "439",
+						"name": "Exchange Sale",
+						"link": "sales/exchangeSale",
+						"icon": null,
+						"children": []
+					},
+					{
+						"id": "3",
+						"name": "Retail sale",
+						"link": "sales/retailSale",
+						"icon": "retail_sale.png",
+						"children": []
+					},
+					{
+						"id": "4",
+						"name": "Whole Sale",
+						"link": "sales/wholeSale",
+						"icon": "whole_sale.png",
+						"children": []
+					}
+				]
+			},
+			{
+				"id": "8",
+				"name": "Inventory",
+				"link": "#",
+				"icon": "add_item.png",
+				"children": [
+					{
+						"id": "98",
+						"name": "Brand",
+						"link": "settings/brand",
+						"icon": null,
+						"children": [
+							{
+								"id": "251",
+								"name": "Add Brand",
+								"link": "settings/newBrand",
+								"icon": null,
+								"children": []
+							}
+						]
+					},
+					{
+						"id": "18",
+						"name": "Item",
+						"link": "items/index",
+						"icon": null,
+						"children": [
+							{
+								"id": "19",
+								"name": "Add Item",
+								"link": "items/newItem",
+								"icon": null,
+								"children": []
+							},
+							{
+								"id": "21",
+								"name": "Manage Item",
+								"link": "items/index",
+								"icon": null,
+								"children": []
+							},
+							{
+								"id": "254",
+								"name": "Add Item Stock",
+								"link": "items/newStock",
+								"icon": null,
+								"children": []
+							},
+							{
+								"id": "255",
+								"name": "Manage Item Stock",
+								"link": "items/itemStock",
+								"icon": null,
+								"children": []
+							}
+						]
+					},
+					{
+						"id": "22",
+						"name": "Item Category",
+						"link": "settings/iCategory",
+						"icon": null,
+						"children": [
+							{
+								"id": "253",
+								"name": "Add Item Category",
+								"link": "settings/newCategory",
+								"icon": null,
+								"children": []
+							},
+							{
+								"id": "256",
+								"name": "Manage Item Category",
+								"link": "settings/iCategory",
+								"icon": null,
+								"children": []
+							}
+						]
+					},
+					{
+						"id": "23",
+						"name": "Item Color",
+						"link": "settings/iColor",
+						"icon": null,
+						"children": [
+							{
+								"id": "259",
+								"name": "Add Item Color",
+								"link": "settings/newColor",
+								"icon": null,
+								"children": []
+							},
+							{
+								"id": "260",
+								"name": "Manage Item Color",
+								"link": "settings/iColor",
+								"icon": null,
+								"children": []
+							}
+						]
+					},
+					{
+						"id": "24",
+						"name": "Item Size",
+						"link": "settings/iSize",
+						"icon": null,
+						"children": [
+							{
+								"id": "261",
+								"name": "Add Item Size",
+								"link": "settings/newSize",
+								"icon": null,
+								"children": []
+							},
+							{
+								"id": "262",
+								"name": "Manage Item Size",
+								"link": "settings/iSize",
+								"icon": null,
+								"children": []
+							}
+						]
+					},
+					{
+						"id": "25",
+						"name": "Item Unit",
+						"link": "settings/iUnit",
+						"icon": null,
+						"children": [
+							{
+								"id": "257",
+								"name": "Add Item Unit",
+								"link": "settings/newUnit",
+								"icon": null,
+								"children": []
+							},
+							{
+								"id": "258",
+								"name": "Manage Item Unit",
+								"link": "settings/iUnit",
+								"icon": null,
+								"children": []
+							}
+						]
+					}
+				]
+			},
+			{
+				"id": "11",
+				"name": "Accounts",
+				"link": "#",
+				"icon": "income.png",
+				"children": [
+					{
+						"id": "298",
+						"name": "Bank Account",
+						"link": null,
+						"icon": null,
+						"children": [
+							{
+								"id": "299",
+								"name": "Add Bank Account",
+								"link": "accounts/newBankAccount",
+								"icon": null,
+								"children": []
+							},
+							{
+								"id": "300",
+								"name": "Manage Bank Account",
+								"link": "accounts/bankAccount",
+								"icon": null,
+								"children": []
+							}
+						]
+					},
+					{
+						"id": "301",
+						"name": "Account Transfer",
+						"link": null,
+						"icon": null,
+						"children": [
+							{
+								"id": "302",
+								"name": "Add Account Transfer",
+								"link": "accounts/newAccTransfer",
+								"icon": null,
+								"children": ["
+
+
+                                result sample

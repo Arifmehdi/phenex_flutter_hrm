@@ -1,0 +1,8 @@
+https://www.bs-org.com/index.php/api/authentication/flutter_logout
+
+{
+	"success": false,
+	"message": "No token provided",
+	"data": null,
+	"error_code": "NO_TOKEN"
+}

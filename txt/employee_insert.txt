@@ -1,0 +1,66 @@
+public function employeeInsertApi()
+{
+    header('Content-Type: application/json');
+
+    $orgID = $this->input->post('orgID');
+    $userID = $this->input->post('userID');
+
+    $config['upload_path']   = './employee_pic/';
+    $config['allowed_types'] = 'gif|jpg|png|jpeg';
+    $config['max_size']      = 2048;
+
+    $this->load->library('upload', $config);
+
+    $image_name = "";
+
+    if (!empty($_FILES['image']['name'])) {
+        if ($this->upload->do_upload('image')) {
+            $filedata = $this->upload->data();
+            $image_name = $filedata['file_name'];
+        }
+    }
+
+    $employeeData = array(
+        'employee_name' => $this->input->post('employee_name'),
+        'employee_code' => $this->input->post('employee_code'),
+        'department_id' => $this->input->post('department_id'),
+        'designation_id' => $this->input->post('designation_id'),
+        'section_id' => $this->input->post('section_id'),
+        'employee_gender' => $this->input->post('employee_gender'),
+        'birth_date' => $this->input->post('birth_date'),
+        'contact' => $this->input->post('contact'),
+        'email' => $this->input->post('email'),
+        'fathers_name' => $this->input->post('fathers_name'),
+        'mothers_name' => $this->input->post('mothers_name'),
+        'h_w_name' => $this->input->post('h_w_name'),
+        'nationality' => $this->input->post('nationality'),
+        'nid' => $this->input->post('nid'),
+        'blood_group' => $this->input->post('blood_group'),
+        'present_address' => $this->input->post('present_address'),
+        'permanent_address' => $this->input->post('permanent_address'),
+        'start_date' => $this->input->post('start_date'),
+        'end_date' => $this->input->post('end_date'),
+        'previous_company_name' => $this->input->post('previous_company_name'),
+        'image' => $image_name,
+        'status' => 1,
+        'create_date' => date("Y-m-d H:i:s"),
+        'create_by' => $userID,
+        'orgID' => $orgID
+    );
+
+    $insert = $this->db->insert('z_hrm_employee', $employeeData);
+
+    if ($insert) {
+        echo json_encode([
+            'status' => true,
+            'message' => 'Employee inserted successfully'
+        ]);
+    } else {
+        echo json_encode([
+            'status' => false,
+            'message' => 'Employee insert failed'
+        ]);
+    }
+}
+
+https://www.bs-org.com/index.php/api/employeeInsertApi

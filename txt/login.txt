@@ -1,0 +1,33 @@
+https://www.bs-org.com/index.php/api/authentication/flutter_login
+{
+	"success": true,
+	"message": "Login successful",
+	"data": {
+		"user": {
+			"id": 1031,
+			"name": "Md. Tomis Uddin Shawon",
+			"org_name": "Pacific International",
+			"phone": "01911933192",
+			"employee_id": "",
+			"role": {
+				"level": 0,
+				"name": "Unknown",
+				"department_id": 3,
+				"designation_id": 3
+			},
+			"organization": {
+				"id": 103,
+				"outlet_id": 1,
+				"home_page": 393
+			},
+			"permissions": {
+				"can_manage_orders": false,
+				"can_deliver": false,
+				"can_view_reports": false
+			}
+		},
+		"token": "eyJ1c2VyX2lkIjoiMTAzMSIsInBob25lIjoiMDE5MTE5MzMxOTIiLCJ0aW1lc3RhbXAiOjE3NzI0ODkwOTQsImV4cGlyeSI6MTc3MjU3NTQ5NH0=",
+		"expires_in": 86400
+	},
+	"error_code": null
+}

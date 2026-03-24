@@ -1,0 +1,99 @@
+<style>
+    .act-btn{color:#fff;}
+</style>
+<div class="outer">
+    <div class="inner">
+        <div class="page-header"><!-- Page header -->
+            <h5><i class="font-table"></i>Company Income</h5>
+            <ul class="icons">
+                <li><a href="#" class="hovertip" title="My tasks"><i class="font-tasks"></i></a></li>
+                <li><a href="#" class="hovertip" title="Reload data"><i class="font-refresh"></i></a></li>
+                <li><a href="#" class="hovertip" title="Settings"><i class="font-cog"></i></a></li>
+            </ul>
+        </div><!-- /page header -->
+
+        <div class="body">
+            <!-- Middle navigation standard -->
+            <?php //$this->load->view('admin/cms/dashboard/dashboardMenu'); ?>
+            <!-- Content container -->
+            <div class="container">
+                <!-- Default datatable -->
+                <div class="block well">
+                    <div class="navbar">
+                        <div class="navbar-inner">
+                            <h5>Income List (<a href="<?php echo base_url(); ?>index.php/accounts/newIncome"><strong style="color:#BA6D6D"> + New </strong></a>)</h5>
+                        </div>
+                    </div>
+                    <div class="table-overflow">
+                        <table class="table table-striped table-bordered" >
+                            <thead>
+                                <tr>
+                                    <th width="30%">From: <code><?php echo date("d-M-Y", strtotime($start)); ?> </code>&nbsp;&nbsp; To: <code><?php echo  date("d-M-Y", strtotime($end)); ?></code></th>
+                                    <th width="70%" align="right">
+                            <form action="<?php echo base_url(); ?>index.php/accounts/incomeRange" method="post">
+                                <div class="control-group" style="padding:0px;">
+                                    <div class="controls" align="right">
+                                        Search From: <input class="span4" type="date" name="dateFrom" />&nbsp;&nbsp;
+                                        To: <input class="span4" type="date" name="dateTo" />
+                                        <button type="submit" name="submit" class="btn btn-warning">Search</button>
+                                    </div>
+                                </div>
+                            </form>
+                            </th>
+                            </tr>
+                            </thead>
+                        </table>
+                        <table class="table table-striped table-bordered" id="data-table" >
+                            <thead>
+                                <tr>
+                                    <th width="10%" style="text-align:center">SL#</th>
+                                    <th width="20%" style="text-align:center">Head</th>
+                                    <th width="15%" style="text-align:center">Amount</th>
+                                    <th width="15%" style="text-align:center">Date</th>
+                                    <th width="15%" style="text-align:center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php
+                                $sl = 0;
+								$incomeTotal = 0;
+                                foreach ($incomeList as $incomes):
+                                    $sl = $sl + 1;
+									$incomeTotal = $incomeTotal + $incomes->incomeAmount
+                                    ?>
+                                    <tr>
+                                        <td style="text-align:center"><?php echo $sl; ?></td>
+                                        <td><?php echo $incomes->iHead; ?></td>
+                                        <!--<td><?php echo $incomes->comments; ?></td>-->
+                                        <td align="right"><?php echo number_format($incomes->incomeAmount, 2); ?></td>
+                                        <td align="center"><?php echo $incomes->date; ?></td>
+                                        <td style="text-align:center">
+                                            <ul class="table-controls">
+                                                <li><a href="#" class="" title="View Details"><i class="font-search btn-info" style="color:#fff;font-size:12px;"></i></a> </li>
+                                                <li><a href="<?php echo base_url(); ?>index.php/accounts/editIncome/<?php echo $incomes->id; ?>" class="" title="Edit Content"><i class="font-pencil btn-warning" style="color:#fff;font-size:12px;"></i></a> </li>
+                                                <li><a href="#" class="" title="Delete Content"><i class="font-remove btn-danger" style="color:#fff;font-size:12px;"></i></a> </li>
+                                            </ul>
+                                        </td>
+                                    </tr>
+                                    <?php
+                                endforeach;
+                                ?>
+								<tr>
+                                    <td style="text-align:center"><b><?php echo 'Total';//$sl; ?></b></td>
+                                    <td style="text-align:center"><?php //echo 'Total';//$sl; ?></td>
+                                    <td style="text-align:right"><b><?php echo number_format($incomeTotal, 2); ?></b></td>
+                                    <td style="text-align:center"><?php //echo 'Total';//$sl; ?></td>
+                                    <td style="text-align:center"><?php //echo 'Total';//$sl; ?></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- /default datatable -->
+
+            </div>
+            <!-- /content container -->
+
+        </div>
+    </div>
+</div>

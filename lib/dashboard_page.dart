@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'login_page.dart';
 import 'session_manager.dart';
 import 'employee_list_page.dart';
+import 'finance_table_page.dart';
 
 class DashboardPage extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -109,7 +110,8 @@ class _DashboardPageState extends State<DashboardPage> {
               color: const Color(0xFFE8E8E8),
               child: Column(
                 children: [
-                  const DashHeader(),
+                  if (_selectedLink != 'accounts/payable' && _selectedLink != 'accounts/receivable')
+                    const DashHeader(),
                   Expanded(
                     child: _buildMainContent(),
                   ),
@@ -139,6 +141,10 @@ class _DashboardPageState extends State<DashboardPage> {
          isSidebarOpen: _isSidebarOpen,
          onLinkSelected: _onMenuSelected,
        );
+    } else if (_selectedLink == 'accounts/payable') {
+      return const FinanceTablePage(title: 'Payable');
+    } else if (_selectedLink == 'accounts/receivable') {
+      return const FinanceTablePage(title: 'Receivable');
     }
     
     // Default to classic if nothing else matches but we have a selection
@@ -234,12 +240,24 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   List<MegaMenuItem> _buildMenuItems(List<dynamic> data, int level) {
     return data.map((item) {
       final children = item['children'] as List<dynamic>? ?? [];
+      String? link = item['link'];
+      String name = item['name'] ?? '';
+      
+      // Fallback links for Payable/Receivable
+      if (link == null || link == '#') {
+        if (name.toLowerCase().contains('payable')) {
+          link = 'accounts/payable';
+        } else if (name.toLowerCase().contains('receivable')) {
+          link = 'accounts/receivable';
+        }
+      }
+
       return MegaMenuItem(
-        label: item['name'] ?? '',
-        link: item['link'],
+        label: name,
+        link: link,
         level: level,
-        active: widget.selectedLink == item['link'],
-        onTap: () => widget.onMenuSelected(item['link']),
+        active: widget.selectedLink == link,
+        onTap: () => widget.onMenuSelected(link),
         children: _buildMenuItems(children, level + 1),
       );
     }).toList();
@@ -397,13 +415,25 @@ class _MegaMenuItemState extends State<MegaMenuItem> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: Text(
-                    widget.label,
-                    style: TextStyle(
-                      color: widget.level == 0 ? const Color(0xFF8BCFEA) : Colors.white70,
-                      fontSize: widget.level == 0 ? 13 : 12,
-                      fontWeight: widget.level == 0 ? FontWeight.w600 : FontWeight.normal,
-                    ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _getIconForLabel(widget.label),
+                        size: 14,
+                        color: widget.level == 0 ? const Color(0xFF8BCFEA) : Colors.white70,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          widget.label,
+                          style: TextStyle(
+                            color: widget.level == 0 ? const Color(0xFF8BCFEA) : Colors.white70,
+                            fontSize: widget.level == 0 ? 13 : 12,
+                            fontWeight: widget.level == 0 ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Row(
@@ -436,6 +466,22 @@ class _MegaMenuItemState extends State<MegaMenuItem> {
           ...widget.children,
       ],
     );
+  }
+
+  IconData _getIconForLabel(String label) {
+    label = label.toLowerCase();
+    if (label.contains('dashboard')) return Icons.dashboard;
+    if (label.contains('sale')) return Icons.shopping_cart;
+    if (label.contains('inventory')) return Icons.inventory;
+    if (label.contains('account')) return Icons.account_balance_wallet;
+    if (label.contains('payable')) return Icons.payments;
+    if (label.contains('receivable')) return Icons.call_received;
+    if (label.contains('report')) return Icons.assessment;
+    if (label.contains('setting')) return Icons.settings;
+    if (label.contains('employee')) return Icons.people;
+    if (label.contains('attendance')) return Icons.how_to_reg;
+    if (label.contains('leave')) return Icons.exit_to_app;
+    return Icons.circle;
   }
 }
 
@@ -532,8 +578,8 @@ class EmployeeDashboard extends StatelessWidget {
 
   Widget _buildDashboardGrid() {
     final List<Map<String, dynamic>> items = [
-      {'title': 'Payment || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFe8f0fe), 'btn': 'btn-blue', 'btnText': '✔ New Voucher'},
-      {'title': 'Receive || Year-2026', 'val': '8', 'amt': '৳ : 179855.00', 'color': const Color(0xFFd9f5df), 'btn': 'btn-green', 'btnText': '✔ New Voucher'},
+      {'title': 'Payment || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFe8f0fe), 'btn': 'btn-blue', 'btnText': '✔ New Voucher', 'link': 'accounts/payable'},
+      {'title': 'Receive || Year-2026', 'val': '8', 'amt': '৳ : 179855.00', 'color': const Color(0xFFd9f5df), 'btn': 'btn-green', 'btnText': '✔ New Voucher', 'link': 'accounts/receivable'},
       {'title': 'Journal || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFf8d7da), 'btn': 'btn-red', 'btnText': '✔ New Voucher'},
       {'title': 'Contra || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFd1ecf1), 'btn': 'btn-cyan', 'btnText': '✔ New Voucher'},
       {'title': 'Approve MRR || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFffe5c3), 'btn': 'btn-orange', 'btnText': '✔ View Approval'},
@@ -554,59 +600,70 @@ class EmployeeDashboard extends StatelessWidget {
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
-        return Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFAFAFA),
-            border: Border.all(color: const Color(0xFFDDDDDD)),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(item['title'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-              const Spacer(),
-              Row(
-                children: [
-                  Container(
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: item['color'],
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(item['val'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      item['amt'],
-                      style: TextStyle(
-                        fontSize: 11, 
-                        fontWeight: FontWeight.bold,
-                        color: item['amt'].contains('179') || item['amt'].contains('325') ? Colors.green : Colors.black
+        return InkWell(
+          onTap: () {
+            if (item['link'] != null) {
+              onLinkSelected(item['link']);
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFAFAFA),
+              border: Border.all(color: const Color(0xFFDDDDDD)),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item['title'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                Row(
+                  children: [
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: item['color'],
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(item['val'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              SizedBox(
-                height: 24,
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _getBtnColor(item['btn']),
-                    padding: EdgeInsets.zero,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
-                  ),
-                  child: Text(item['btnText'], style: const TextStyle(color: Colors.white, fontSize: 10)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        item['amt'],
+                        style: TextStyle(
+                          fontSize: 11, 
+                          fontWeight: FontWeight.bold,
+                          color: item['amt'].contains('179') || item['amt'].contains('325') ? Colors.green : Colors.black
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                const Spacer(),
+                SizedBox(
+                  height: 24,
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      if (item['link'] != null) {
+                        onLinkSelected(item['link']);
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _getBtnColor(item['btn']),
+                      padding: EdgeInsets.zero,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
+                    ),
+                    child: Text(item['btnText'], style: const TextStyle(color: Colors.white, fontSize: 10)),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },

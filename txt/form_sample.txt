@@ -1,0 +1,147 @@
+<script type="text/javascript" src="<?php echo base_url(); ?>admin_assets/js/globalize/globalize.js"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>admin_assets/js/globalize/globalize.culture.de-DE.js"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>admin_assets/js/globalize/globalize.culture.ja-JP.js"></script>
+<script type="text/javascript" src="<?php echo base_url(); ?>admin_assets/js/plugins/ui/jquery.mousewheel.js"></script>
+<div class="outer">
+    <div class="inner">
+        <div class="page-header"><!-- Page header -->
+            <h5><a href="<?php echo base_url(); ?>index.php/accounts/income"><i class="font-list"></i></a> Income Form</h5>
+            <ul class="icons">
+                <li><a href="#" class="hovertip" title="My tasks"><i class="font-tasks"></i></a></li>
+                <li><a href="#" class="hovertip" title="Reload data"><i class="font-refresh"></i></a></li>
+                <li><a href="#" class="hovertip" title="Settings"><i class="font-cog"></i></a></li>
+            </ul>
+        </div><!-- /page header -->
+        <div class="body">
+            <!-- Middle navigation standard  -->
+            <?php $this->load->view('admin/cms/dashboard/dashboardMenu'); ?>
+            <!-- Content container -->
+            <div class="container">
+                <!-- Form versions -->
+                <div class="row-fluid">
+                    <!-- Column -->
+                    <div class="span6">
+                        <!-- Default form  -->
+                        <form action="<?php echo base_url(); ?>index.php/accounts/<?php echo ($ac_type == 2) ? 'updateIncome' : 'incomeInsert'; ?> " method="post">
+                            <div class="block well">
+                                <div class="navbar"><div class="navbar-inner"><h5>New Income <a href="<?php echo base_url(); ?>index.php/accounts/income"><i class="font-list"></i></a></h5></div></div>
+                                <div class="control-group">                                    
+                                    <label class="control-label">Income Head</label>
+                                    <div class="controls">
+                                        <select data-placeholder="Select One" name="incomeHead" class="select-search" style="width:262px;background:#566D7E;">
+                                            <option value="0">( Select One )</option>
+                                            <?php
+                                            foreach ($incomeHeadList as $incomeHead):
+                                                ?>
+                                                <option value="<?php echo $incomeHead->id; ?>" <?php
+                                                if ($ac_type == 2) {
+                                                    echo ($incomeHead->id == $incomeInfo->incomeType) ? 'Selected' : '';
+                                                }
+                                                ?>><?php echo $incomeHead->categoryName; ?></option>
+                                                        <?php
+                                                    endforeach;
+                                                    ?>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="control-group">
+                                    <label class="control-label">Income Amount</label>
+                                    <div class="controls">
+                                        <?php
+                                        if ($ac_type == 3) {
+                                            echo number_format($incomeInfo->incomeAmount, 2);
+                                        } else {
+                                            ?>
+                                            <input type="text" name="incomeAmount" value="<?php echo ($ac_type == 2) ? $incomeInfo->incomeAmount : '' ?>" class="span12" placeholder="Income Amount" required />
+                                            <input type="hidden" name="incomeID" value="<?php echo ($ac_type == 2) ? $incomeInfo->id : '' ?>" class="span12"  />
+                                            <?php
+                                        }
+                                        ?>
+                                    </div>
+                                </div>
+                                <div class="control-group">
+                                    <label class="control-label">Transaction Date</label>
+                                    <div class="controls">
+                                        <?php
+                                        if ($ac_type == 3) {
+                                            echo $incomeInfo->date;
+                                        } else {
+                                            ?>
+                                            <input type="date" name="incomeDate" value="<?php echo ($ac_type == 2) ? date("Y-m-d", strtotime($incomeInfo->date)) : '' ?>" class="span12" placeholder="Transection Date" required />
+                                            <?php
+                                        }
+                                        ?>
+                                    </div>
+                                </div>
+                                <div class="control-group">
+                                    <label class="control-label">Site Comments</label>
+                                    <div class="controls">
+                                        <?php
+                                        if ($ac_type == 3) {
+                                            echo $incomeInfo->comments;
+                                        } else {
+                                            ?>
+                                            <textarea id="editor" name="content" rows="3" cols="16" style="float: left;">
+                                                <?php
+                                                if ($ac_type == 2) {
+                                                    echo $incomeInfo->comments;
+                                                }
+                                                ?>
+                                            </textarea>
+                                            <?php
+                                        }
+                                        ?>
+                                    </div>
+                                </div>
+                                <!--<div class="control-group">
+                                    <label class="control-label">Active</label>
+                                    <div class="controls">
+                                        <label class="checkbox">
+                                <?php
+                                if ($ac_type == 3) {
+                                    ($content->status == 1) ? 'Active' : 'Inactive';
+                                } else {
+                                    ?>
+                                                        <input type="checkbox" value="" name="activeStatus" class="style" checked>
+                                    <?php
+                                }
+                                ?>
+                                        </label>
+                                    </div>
+                                </div>-->
+                                <div class="form-actions align-right">
+                                    <?php
+                                    if ($ac_type != 3) {
+                                        if ($ac_type != 2) {
+                                            ?>
+                                            <button type="submit" name="submit" class="btn btn-primary">Submit</button>
+                                            <?php
+                                        } else {
+                                            ?>
+                                            <button type="submit" name="submit" class="btn btn-warning">Update</button>
+                                            <?php
+                                        }
+                                        ?>
+
+                                        <button type="button" class="btn btn-danger">Cancel</button>
+                                        <button type="reset" class="btn">Reset</button>
+                                        <?php
+                                    }
+                                    ?>
+                                </div>
+                            </div>
+                        </form>
+                        <!-- /default form -->
+
+                    </div>
+                    <!-- /column -->
+
+                </div>
+                <!-- /form versions -->
+
+            </div>
+            <!-- /content container -->
+
+        </div>
+    </div>
+</div>

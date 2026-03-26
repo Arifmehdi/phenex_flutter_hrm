@@ -31,6 +31,15 @@ class SessionManager {
     return prefs.getString(_keyToken);
   }
 
+  static Future<Map<String, dynamic>> getSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    return {
+      'orgId': prefs.getInt(_keyOrgId),
+      'userId': prefs.getInt(_keyUserId),
+      'token': prefs.getString(_keyToken),
+    };
+  }
+
   static Future<void> clearSession() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();

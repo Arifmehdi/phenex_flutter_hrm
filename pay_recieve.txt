@@ -1,0 +1,24 @@
+Form: New Receivable
+-----------------------
+
+1.	Dealer / Customer 
+Dropdown field (Dealer list)
+2.	Receivable Amount
+Input text field
+3.	Receivable Date
+Calender field
+4.	Site Note
+Text Area
+
+
+Form: New Payable
+--------------------
+
+1.	Supplier / Vendor 
+Dropdown field (Supplier list)
+2.	Payable Amount
+Input text field
+3.	Payable Date
+Calandar field
+4.	Site Note
+Text Area

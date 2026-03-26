@@ -105,7 +105,7 @@ class _DashboardPageState extends State<DashboardPage> {
             // Main content
             Column(
               children: [
-                if (_selectedLink != 'accounts/payable' && _selectedLink != 'accounts/receivable')
+                if (_selectedLink != 'accounts/payable' && _selectedLink != 'accounts/receivable' && _selectedLink != 'hrm/employeeList')
                   const DashHeader(),
                 Expanded(
                   child: _buildMainContent(),

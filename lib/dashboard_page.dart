@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer';
 import 'login_page.dart';
 import 'session_manager.dart';
 import 'employee_list_page.dart';
@@ -150,7 +151,7 @@ class _DashboardPageState extends State<DashboardPage> {
          onLinkSelected: _onMenuSelected,
        );
     } else if (_selectedLink == 'hrm/employeeAttendance') {
-       return const AttendanceScreen();
+       return AttendanceScreen(userData: widget.userData);
     } else if (_selectedLink == 'hrm/leaveApplication') {
        return const LeaveApplicationPage();
     } else if (_selectedLink == 'hrm/employeeList') {
@@ -947,7 +948,9 @@ class TableCard extends StatelessWidget {
 }
 
 class AttendanceScreen extends StatefulWidget {
-  const AttendanceScreen({super.key});
+  final Map<String, dynamic> userData;
+
+  const AttendanceScreen({super.key, required this.userData});
 
   @override
   State<AttendanceScreen> createState() => _AttendanceScreenState();
@@ -960,6 +963,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   DateTime? _checkInDateTime;
   bool _isCheckedIn = false;
   bool _isCheckedOut = false;
+  bool _isLoading = false;
   late Timer _timer;
   DateTime _currentTime = DateTime.now();
 
@@ -971,6 +975,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         _currentTime = DateTime.now();
       });
     });
+    _loadTodayStatus();
   }
 
   @override
@@ -979,24 +984,125 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     super.dispose();
   }
 
+  Future<void> _loadTodayStatus() async {
+    final orgId = await SessionManager.getOrgId();
+
+    if (orgId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Session expired. Please login again.')),
+      );
+      return;
+    }
+
+    var employeeId = widget.userData['employee_id'];
+    if (employeeId == null || employeeId.toString().isEmpty) {
+      // Fallback to user id if employee_id is not provided in userData
+      employeeId = widget.userData['id'];
+    }
+
+    if (employeeId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Employee ID not found.')),
+      );
+      return;
+    }
+
+    try {
+      final token = await SessionManager.getToken();
+
+      final response = await http.get(
+        Uri.parse(
+          'https://www.bs-org.com/index.php/api/Attendance/todayStatus?employee_id=$employeeId&orgID=$orgId',
+        ),
+        headers: {
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final body = response.body.trim();
+        if (body.startsWith('<!DOCTYPE') || body.startsWith('<html')) {
+          throw const FormatException('Server returned HTML instead of JSON');
+        }
+
+        final data = json.decode(body);
+        if (data['status'] == true) {
+          setState(() {
+            _isCheckedIn = data['checked_in'] ?? false;
+            _isCheckedOut = data['checked_out'] ?? false;
+
+            if (data['data'] != null) {
+              final attendanceData = data['data'];
+              if (attendanceData['time_in'] != null && attendanceData['time_in'] != '') {
+                _checkInTime = _formatTime(attendanceData['time_in']);
+                final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+                try {
+                  _checkInDateTime = DateTime.parse('$today ${attendanceData['time_in']}');
+                } catch (e) {
+                  debugPrint('Error parsing check-in time: $e');
+                }
+              }
+              if (attendanceData['time_out'] != null && attendanceData['time_out'] != '') {
+                _checkOutTime = _formatTime(attendanceData['time_out']);
+                if (_checkInDateTime != null) {
+                  final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+                  try {
+                    final checkOutDateTime = DateTime.parse('$today ${attendanceData['time_out']}');
+                    final duration = checkOutDateTime.difference(_checkInDateTime!);
+                    final hours = duration.inHours.toString().padLeft(2, '0');
+                    final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
+                    _workingHours = '$hours:$minutes';
+                  } catch (e) {
+                    debugPrint('Error parsing check-out time: $e');
+                  }
+                }
+              }
+            }
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading attendance status: $e');
+    }
+  }
+
+  String _formatTime(String timeString) {
+    try {
+      if (timeString.isEmpty) return '--:--';
+      // Handle cases where time might be HH:mm:ss
+      final parts = timeString.split(':');
+      if (parts.length >= 2) {
+        final time = DateFormat('HH:mm').parse('${parts[0]}:${parts[1]}');
+        return DateFormat('hh:mm a').format(time);
+      }
+      return timeString;
+    } catch (e) {
+      return timeString;
+    }
+  }
+
   Future<void> _takeCheckInPicture() async {
+    if (_isCheckedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Already checked in today!')),
+      );
+      return;
+    }
+
     final ImagePicker picker = ImagePicker();
     try {
       final XFile? photo = await picker.pickImage(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.front,
+        imageQuality: 50, // Reduce quality to save bandwidth
       );
 
       if (photo != null) {
-        final now = DateTime.now();
         setState(() {
-          _checkInDateTime = now;
-          _checkInTime = DateFormat('hh:mm a').format(now);
-          _isCheckedIn = true;
+          _isLoading = true;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Check-in successful!')),
-        );
+
+        await _saveAttendance('checkin', photo);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1013,27 +1119,27 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       return;
     }
 
+    if (_isCheckedOut) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Already checked out today!')),
+      );
+      return;
+    }
+
     final ImagePicker picker = ImagePicker();
     try {
       final XFile? photo = await picker.pickImage(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.front,
+        imageQuality: 50,
       );
 
       if (photo != null) {
-        final now = DateTime.now();
-        final duration = now.difference(_checkInDateTime!);
-        final hours = duration.inHours.toString().padLeft(2, '0');
-        final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
-
         setState(() {
-          _checkOutTime = DateFormat('hh:mm a').format(now);
-          _workingHours = '$hours:$minutes';
-          _isCheckedOut = true;
+          _isLoading = true;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Check-out successful!')),
-        );
+
+        await _saveAttendance('checkout', photo);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1042,23 +1148,149 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
+  Future<void> _saveAttendance(String type, XFile photo) async {
+    final orgId = await SessionManager.getOrgId();
+
+    if (orgId == null) {
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Session expired. Please login again.')),
+      );
+      return;
+    }
+
+    var employeeId = widget.userData['employee_id'];
+    if (employeeId == null || employeeId.toString().isEmpty) {
+      employeeId = widget.userData['id'];
+    }
+    
+    final userId = widget.userData['id'];
+
+    if (employeeId == null || userId == null) {
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Required user data not found.')),
+      );
+      return;
+    }
+
+    try {
+      final token = await SessionManager.getToken();
+      final uri = Uri.parse('https://www.bs-org.com/index.php/api/Attendance/saveAttendance');
+      final request = http.MultipartRequest('POST', uri);
+
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+
+      // Add fields as expected by CI_Controller in attendance.txt
+      request.fields['employee_id'] = employeeId.toString();
+      request.fields['shift_id'] = '1';
+      request.fields['orgID'] = orgId.toString();
+      request.fields['user_id'] = userId.toString();
+      request.fields['type'] = type;
+
+      // Add image file
+      final bytes = await photo.readAsBytes();
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'image',
+          bytes,
+          filename: 'attendance_${type}_${employeeId}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        ),
+      );
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      setState(() {
+        _isLoading = false;
+      });
+
+      final body = response.body.trim();
+      if (body.startsWith('<!DOCTYPE') || body.startsWith('<html')) {
+        debugPrint('HTML Response: ${body.substring(0, 200)}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Server error: Received HTML instead of JSON')),
+        );
+        return;
+      }
+
+      final data = json.decode(body);
+
+      if (data['status'] == true) {
+        final now = DateTime.now();
+
+        if (type == 'checkin') {
+          setState(() {
+            _checkInDateTime = now;
+            _checkInTime = DateFormat('hh:mm a').format(now);
+            _isCheckedIn = true;
+          });
+        } else if (type == 'checkout') {
+          setState(() {
+            _checkOutTime = DateFormat('hh:mm a').format(now);
+            _isCheckedOut = true;
+            if (_checkInDateTime != null) {
+              final duration = now.difference(_checkInDateTime!);
+              final hours = duration.inHours.toString().padLeft(2, '0');
+              final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
+              _workingHours = '$hours:$minutes';
+            }
+          });
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(data['message'] ?? '${type.toUpperCase()} successful!')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(data['message'] ?? 'Failed to save attendance')),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      debugPrint('Error saving attendance: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildTodayStatusCard(),
-          const SizedBox(height: 20),
-          const Text(
-            'Attendance History',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
+    return Stack(
+      children: [
+        SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildTodayStatusCard(),
+              const SizedBox(height: 20),
+              const Text(
+                'Attendance History',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
+              ),
+              const SizedBox(height: 10),
+              _buildAttendanceList(),
+            ],
           ),
-          const SizedBox(height: 10),
-          _buildAttendanceList(),
-        ],
-      ),
+        ),
+        if (_isLoading)
+          Container(
+            color: Colors.black.withOpacity(0.3),
+            child: const Center(
+              child: CircularProgressIndicator(),
+            ),
+          ),
+      ],
     );
   }
 
@@ -1116,23 +1348,33 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   Widget _buildActionButton(IconData icon, String label, Color color, VoidCallback? onPressed) {
+    final isDisabled = onPressed == null || _isLoading;
     return Column(
       children: [
         ElevatedButton(
-          onPressed: onPressed,
+          onPressed: isDisabled ? null : onPressed,
           style: ElevatedButton.styleFrom(
-            backgroundColor: onPressed == null ? Colors.grey : color,
+            backgroundColor: isDisabled ? Colors.grey : color,
             shape: const CircleBorder(),
             padding: const EdgeInsets.all(16),
           ),
-          child: Icon(icon, color: Colors.white, size: 28),
+          child: _isLoading && onPressed != null
+              ? const SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : Icon(icon, color: Colors.white, size: 28),
         ),
         const SizedBox(height: 8),
         Text(
           label,
           style: TextStyle(
             fontWeight: FontWeight.w500,
-            color: onPressed == null ? Colors.grey : Colors.black,
+            color: isDisabled ? Colors.grey : Colors.black,
           ),
         ),
       ],

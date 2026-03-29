@@ -1,0 +1,184 @@
+Api 
+-------
+GET /index.php/api/Attendance/todayStatus?employee_id=10&orgID=106
+POST /index.php/api/Attendance/saveAttendance
+
+
+logic
+----------
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+class Attendance extends CI_Controller {
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->load->database();
+        $this->load->helper('url');
+    }
+
+    // ================= SAVE ATTENDANCE =================
+    public function saveAttendance()
+    {
+        header('Content-Type: application/json');
+
+        $employee_id = $this->input->post('employee_id');
+        $shift_id    = $this->input->post('shift_id');
+        $orgID       = $this->input->post('orgID');
+        $user_id     = $this->input->post('user_id');
+        $type        = $this->input->post('type'); // checkin / checkout
+
+        // ========= VALIDATION =========
+        if(!$employee_id || !$orgID || !$type){
+            echo json_encode([
+                "status" => false,
+                "message" => "employee_id, orgID and type are required"
+            ]);
+            return;
+        }
+
+        if(empty($_FILES['image']['name'])){
+            echo json_encode([
+                "status" => false,
+                "message" => "Image is required"
+            ]);
+            return;
+        }
+
+        $today = date('Y-m-d');
+        $time  = date('H:i:s');
+
+        // ========= IMAGE UPLOAD =========
+        $config['upload_path']   = FCPATH . 'assets/uploads/attendance/';
+        $config['allowed_types'] = 'jpg|jpeg|png';
+        $config['max_size']      = 2048; // 2MB
+        $config['file_name']     = time().'_'.$employee_id;
+
+        $this->load->library('upload', $config);
+
+        if(!$this->upload->do_upload('image')){
+            echo json_encode([
+                "status" => false,
+                "message" => strip_tags($this->upload->display_errors())
+            ]);
+            return;
+        }
+
+        $uploadData = $this->upload->data();
+        $image_path = 'assets/uploads/attendance/' . $uploadData['file_name'];
+
+        // ========= CHECK EXISTING RECORD =========
+        $existing = $this->db->get_where('z_hrm_attendance', [
+            'employee_id' => $employee_id,
+            'create_date' => $today,
+            'orgID'       => $orgID
+        ])->row();
+
+        // ================= CHECK-IN =================
+        if($type == "checkin"){
+
+            if($existing){
+                echo json_encode([
+                    "status" => false,
+                    "message" => "Already checked in today"
+                ]);
+                return;
+            }
+
+            $data = [
+                'employee_id'   => $employee_id,
+                'shift_id'      => $shift_id,
+                'time_in'       => $time,
+                'checkin_image' => $image_path,
+                'status'        => 1,
+                'create_date'   => $today,
+                'create_time'   => $time,
+                'create_by'     => $user_id,
+                'orgID'         => $orgID
+            ];
+
+            $this->db->insert('z_hrm_attendance', $data);
+
+            echo json_encode([
+                "status" => true,
+                "message" => "Check-in successful",
+                "image_url" => base_url($image_path)
+            ]);
+        }
+
+        // ================= CHECK-OUT =================
+        elseif($type == "checkout"){
+
+            if(!$existing){
+                echo json_encode([
+                    "status" => false,
+                    "message" => "Please check-in first"
+                ]);
+                return;
+            }
+
+            if(!empty($existing->time_out)){
+                echo json_encode([
+                    "status" => false,
+                    "message" => "Already checked out"
+                ]);
+                return;
+            }
+
+            $this->db->where('id', $existing->id);
+            $this->db->update('z_hrm_attendance', [
+                'time_out'       => $time,
+                'checkout_image' => $image_path,
+                'update_date'    => $today,
+                'update_time'    => $time,
+                'update_by'      => $user_id
+            ]);
+
+            echo json_encode([
+                "status" => true,
+                "message" => "Check-out successful",
+                "image_url" => base_url($image_path)
+            ]);
+        }
+
+        // ================= INVALID TYPE =================
+        else{
+            echo json_encode([
+                "status" => false,
+                "message" => "Invalid type (use checkin/checkout)"
+            ]);
+        }
+    }
+
+    // ================= OPTIONAL: GET TODAY STATUS =================
+    public function todayStatus()
+    {
+        header('Content-Type: application/json');
+
+        $employee_id = $this->input->get('employee_id');
+        $orgID       = $this->input->get('orgID');
+        $today       = date('Y-m-d');
+
+        $data = $this->db->get_where('z_hrm_attendance', [
+            'employee_id' => $employee_id,
+            'create_date' => $today,
+            'orgID'       => $orgID
+        ])->row();
+
+        if($data){
+            echo json_encode([
+                "status" => true,
+                "checked_in"  => !empty($data->time_in),
+                "checked_out" => !empty($data->time_out),
+                "data" => $data
+            ]);
+        } else {
+            echo json_encode([
+                "status" => true,
+                "checked_in"  => false,
+                "checked_out" => false
+            ]);
+        }
+    }
+}

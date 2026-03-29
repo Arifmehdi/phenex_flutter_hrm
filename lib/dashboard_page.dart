@@ -10,6 +10,8 @@ import 'session_manager.dart';
 import 'employee_list_page.dart';
 import 'finance_table_page.dart';
 import 'accounts_payable_page.dart';
+import 'supplier_page.dart';
+import 'dealer_page.dart';
 
 class DashboardPage extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -27,7 +29,7 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   String? _selectedLink;
-  bool _sidebarOpen = true;
+  bool _sidebarOpen = false;
 
   @override
   void initState() {
@@ -40,7 +42,7 @@ class _DashboardPageState extends State<DashboardPage> {
     if (phone == '01717956334') {
       _selectedLink = 'hrm/employeeDashboard';
     } else if (name == 'icon2' || orgName == 'icon2' || phone == 'icon2') {
-      _selectedLink = 'classicDashboard';
+      _selectedLink = 'hrm/employeeDashboard';
     } else if (widget.menuData.isNotEmpty) {
       _selectedLink = widget.menuData.first['link'];
     }
@@ -165,8 +167,20 @@ class _DashboardPageState extends State<DashboardPage> {
       return const AccountsPayablePage();
     } else if (_selectedLink == 'accounts/receivable') {
       return const FinanceTablePage(title: 'Receivable');
+    } else if (_selectedLink == 'accounts/supplier' ||
+               _selectedLink == 'supplier' ||
+               _selectedLink == 'suppliers' ||
+               _selectedLink == 'supplier/list' ||
+               _selectedLink?.contains('supplier') == true) {
+      return const SupplierPage();
+    } else if (_selectedLink == 'dealer' ||
+               _selectedLink == 'dealers' ||
+               _selectedLink == 'dealer/manage' ||
+               _selectedLink == 'dealer/list' ||
+               _selectedLink?.contains('dealer') == true) {
+      return const DealerPage();
     }
-    
+
     // Default to classic if nothing else matches but we have a selection
     if (_selectedLink != null) {
       return ClassicDashboard(
@@ -263,12 +277,16 @@ class _SidebarWidgetState extends State<SidebarWidget> {
       String? link = item['link'];
       String name = item['name'] ?? '';
       
-      // Fallback links for Payable/Receivable
+      // Fallback links for Payable/Receivable/Supplier/Dealer
       if (link == null || link == '#') {
         if (name.toLowerCase().contains('payable')) {
           link = 'accounts/payable';
         } else if (name.toLowerCase().contains('receivable')) {
           link = 'accounts/receivable';
+        } else if (name.toLowerCase().contains('supplier')) {
+          link = 'accounts/supplier';
+        } else if (name.toLowerCase().contains('dealer')) {
+          link = 'dealer';
         }
       }
 

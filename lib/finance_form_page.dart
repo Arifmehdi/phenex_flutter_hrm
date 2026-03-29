@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:dropdown_search/dropdown_search.dart';
 
 class FinanceFormPage extends StatefulWidget {
   final String title;
@@ -191,26 +192,39 @@ class _FinanceFormPageState extends State<FinanceFormPage> {
         color: const Color(0xFF566D7E),
         borderRadius: BorderRadius.circular(3),
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _selectedHead,
-          hint: const Text('( Select One )', style: TextStyle(color: Colors.white70, fontSize: 13)),
-          dropdownColor: const Color(0xFF566D7E),
-          icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-          isExpanded: true,
-          style: const TextStyle(color: Colors.white, fontSize: 13),
-          items: _heads.map((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(value),
-            );
-          }).toList(),
-          onChanged: (newValue) {
-            setState(() {
-              _selectedHead = newValue;
-            });
-          },
+      child: DropdownSearch<String>(
+        selectedItem: _selectedHead,
+        items: _heads,
+        itemAsString: (item) => item,
+        onChanged: (newValue) {
+          setState(() {
+            _selectedHead = newValue;
+          });
+        },
+        dropdownDecoratorProps: const DropDownDecoratorProps(
+          dropdownSearchDecoration: InputDecoration(
+            hintText: '( Select One )',
+            hintStyle: TextStyle(color: Colors.white70, fontSize: 13),
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.zero,
+          ),
         ),
+        popupProps: const PopupProps.menu(
+          showSearchBox: true,
+          searchFieldProps: TextFieldProps(
+            decoration: InputDecoration(
+              hintText: 'Search heads...',
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+          ),
+        ),
+        dropdownBuilder: (context, selectedItem) {
+          return Text(
+            selectedItem ?? '( Select One )',
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+          );
+        },
       ),
     );
   }

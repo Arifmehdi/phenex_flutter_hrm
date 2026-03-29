@@ -15,6 +15,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   bool _rememberMe = false;
   bool _isLoading = false;
+  bool _obscurePassword = true;
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
@@ -205,13 +206,25 @@ class _LoginPageState extends State<LoginPage> {
                                     const SizedBox(height: 6),
                                     TextField(
                                       controller: _passwordController,
-                                      obscureText: true,
-                                      decoration: const InputDecoration(
+                                      obscureText: _obscurePassword,
+                                      decoration: InputDecoration(
                                         isDense: true,
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                        border: OutlineInputBorder(),
-                                        focusedBorder: OutlineInputBorder(
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        border: const OutlineInputBorder(),
+                                        focusedBorder: const OutlineInputBorder(
                                           borderSide: BorderSide(color: Color(0xFF2299CC)),
+                                        ),
+                                        suffixIcon: IconButton(
+                                          icon: Icon(
+                                            _obscurePassword ? Icons.visibility_off : Icons.remove_red_eye,
+                                            size: 20,
+                                            color: Colors.grey,
+                                          ),
+                                          onPressed: () {
+                                            setState(() {
+                                              _obscurePassword = !_obscurePassword;
+                                            });
+                                          },
                                         ),
                                       ),
                                     ),

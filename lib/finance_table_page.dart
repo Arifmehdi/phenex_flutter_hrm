@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:dropdown_search/dropdown_search.dart';
 import 'dart:convert';
 import 'session_manager.dart';
 
@@ -443,11 +444,18 @@ class _FinanceFormSectionState extends State<_FinanceFormSection> {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        List<dynamic> fetchedDealers = [];
         if (data is List) {
-          setState(() => _dealers = data);
+          fetchedDealers = data.where((item) => item != null).toList();
         } else if (data is Map && data['data'] != null) {
-          setState(() => _dealers = data['data']);
+          final list = data['data'];
+          if (list is List) {
+            fetchedDealers = list.where((item) => item != null).toList();
+          }
         }
+        setState(() {
+          _dealers = fetchedDealers;
+        });
       }
     } catch (e) {
       debugPrint('Error fetching dealers: $e');
@@ -524,34 +532,61 @@ class _FinanceFormSectionState extends State<_FinanceFormSection> {
           color: const Color(0xFF566D7E),
           borderRadius: BorderRadius.circular(3),
         ),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: _selectedDealer,
-            hint: const Text('( Select Dealer )', style: TextStyle(color: Colors.white70, fontSize: 13)),
-            dropdownColor: const Color(0xFF566D7E),
-            icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-            isExpanded: true,
-            style: const TextStyle(color: Colors.white, fontSize: 13),
-            items: [
-              const DropdownMenuItem<String>(
-                value: null,
-                child: Text('( Select Dealer )', style: TextStyle(color: Color.fromARGB(179, 255, 255, 255))),
-              ),
-              ..._dealers.map((dealer) {
-                final dealerName = dealer['name'] ?? dealer['dealer_name'] ?? dealer['company'] ?? 'Unknown';
-                final dealerId = dealer['id']?.toString() ?? dealer['dealer_id']?.toString();
-                return DropdownMenuItem<String>(
-                  value: dealerId,
-                  child: Text(dealerName),
-                );
-              }).toList(),
-            ],
-            onChanged: (newValue) {
-              setState(() {
-                _selectedDealer = newValue;
-              });
-            },
+        child: DropdownSearch<String>(
+          selectedItem: _selectedDealer,
+          items: _dealers
+              .where((d) => d != null)
+              .map((dealer) => dealer['id']?.toString() ?? dealer['dealer_id']?.toString())
+              .where((id) => id != null)
+              .map((id) => id!)
+              .toList(),
+          itemAsString: (item) {
+            if (item == null) return '( Select Dealer )';
+            final dealer = _dealers.firstWhere(
+              (d) => d != null && (d['id']?.toString() ?? d['dealer_id']?.toString()) == item,
+              orElse: () => {'name': null, 'dealer_name': null, 'company': null},
+            );
+            return dealer['name'] ?? dealer['dealer_name'] ?? dealer['company'] ?? 'Unknown';
+          },
+          onChanged: (newValue) {
+            setState(() {
+              _selectedDealer = newValue;
+            });
+          },
+          dropdownDecoratorProps: const DropDownDecoratorProps(
+            dropdownSearchDecoration: InputDecoration(
+              hintText: '( Select Dealer )',
+              hintStyle: TextStyle(color: Colors.white70, fontSize: 13),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+            ),
           ),
+          popupProps: const PopupProps.menu(
+            showSearchBox: true,
+            searchFieldProps: TextFieldProps(
+              decoration: InputDecoration(
+                hintText: 'Search dealers...',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+            ),
+          ),
+          dropdownBuilder: (context, selectedItem) {
+            if (selectedItem == null) {
+              return Text(
+                '( Select Dealer )',
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              );
+            }
+            final dealer = _dealers.firstWhere(
+              (d) => d != null && (d['id']?.toString() ?? d['dealer_id']?.toString()) == selectedItem,
+              orElse: () => {},
+            );
+            return Text(
+              dealer['name'] ?? dealer['dealer_name'] ?? dealer['company'] ?? 'Unknown',
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            );
+          },
         ),
       );
     }
@@ -562,32 +597,39 @@ class _FinanceFormSectionState extends State<_FinanceFormSection> {
         color: const Color(0xFF566D7E),
         borderRadius: BorderRadius.circular(3),
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _selectedHead,
-          hint: const Text('( Select One )', style: TextStyle(color: Colors.white70, fontSize: 13)),
-          dropdownColor: const Color(0xFF566D7E),
-          icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-          isExpanded: true,
-          style: const TextStyle(color: Colors.white, fontSize: 13),
-          items: [
-            const DropdownMenuItem<String>(
-              value: null,
-              child: Text('( Select Head )', style: TextStyle(color: Color.fromARGB(179, 255, 255, 255))),
-            ),
-            ..._heads.map((String value) {
-              return DropdownMenuItem<String>(
-                value: value,
-                child: Text(value),
-              );
-            }).toList(),
-          ],
-          onChanged: (newValue) {
-            setState(() {
-              _selectedHead = newValue;
-            });
-          },
+      child: DropdownSearch<String>(
+        selectedItem: _selectedHead,
+        items: _heads,
+        itemAsString: (item) => item,
+        onChanged: (newValue) {
+          setState(() {
+            _selectedHead = newValue;
+          });
+        },
+        dropdownDecoratorProps: const DropDownDecoratorProps(
+          dropdownSearchDecoration: InputDecoration(
+            hintText: '( Select One )',
+            hintStyle: TextStyle(color: Colors.white70, fontSize: 13),
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.zero,
+          ),
         ),
+        popupProps: const PopupProps.menu(
+          showSearchBox: true,
+          searchFieldProps: TextFieldProps(
+            decoration: InputDecoration(
+              hintText: 'Search heads...',
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+          ),
+        ),
+        dropdownBuilder: (context, selectedItem) {
+          return Text(
+            selectedItem ?? '( Select One )',
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+          );
+        },
       ),
     );
   }

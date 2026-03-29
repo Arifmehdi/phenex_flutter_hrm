@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:dropdown_search/dropdown_search.dart';
 import 'dart:convert';
 import 'session_manager.dart';
 
@@ -85,15 +86,18 @@ class _AccountsPayablePageState extends State<AccountsPayablePage> {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        List<dynamic> fetchedSuppliers = [];
         if (data is List) {
-          setState(() {
-            _suppliers = data;
-          });
+          fetchedSuppliers = data.where((item) => item != null).toList();
         } else if (data is Map && data['data'] != null) {
-          setState(() {
-            _suppliers = data['data'];
-          });
+          final list = data['data'];
+          if (list is List) {
+            fetchedSuppliers = list.where((item) => item != null).toList();
+          }
         }
+        setState(() {
+          _suppliers = fetchedSuppliers;
+        });
       }
     } catch (e) {
       debugPrint('Error fetching suppliers: $e');
@@ -458,22 +462,55 @@ class _AccountsPayablePageState extends State<AccountsPayablePage> {
                       color: const Color(0xFF566D7E),
                       borderRadius: BorderRadius.circular(3),
                     ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _selectedSupplier,
-                        hint: const Text('( Select One )', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                        dropdownColor: const Color(0xFF566D7E),
-                        icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-                        isExpanded: true,
-                        style: const TextStyle(color: Colors.white, fontSize: 13),
-                        items: _suppliers.map((s) {
-                          return DropdownMenuItem<String>(
-                            value: s['id']?.toString() ?? s['supplier_id']?.toString(),
-                            child: Text(s['name'] ?? s['supplier_name'] ?? 'Unknown'),
-                          );
-                        }).toList(),
-                        onChanged: (val) => setState(() => _selectedSupplier = val),
+                    child: DropdownSearch<String>(
+                      selectedItem: _selectedSupplier,
+                      items: _suppliers
+                          .where((s) => s != null && (s['id']?.toString() ?? s['supplier_id']?.toString()) != null)
+                          .map((s) => (s['id']?.toString() ?? s['supplier_id']?.toString())!)
+                          .toList(),
+                      itemAsString: (item) {
+                        if (item == null) return '( Select One )';
+                        final supplier = _suppliers.firstWhere(
+                          (s) => s != null && (s['id']?.toString() ?? s['supplier_id']?.toString()) == item,
+                          orElse: () => {},
+                        );
+                        return supplier['name'] ?? supplier['supplier_name'] ?? 'Unknown';
+                      },
+                      onChanged: (val) => setState(() => _selectedSupplier = val),
+                      dropdownDecoratorProps: const DropDownDecoratorProps(
+                        dropdownSearchDecoration: InputDecoration(
+                          hintText: '( Select One )',
+                          hintStyle: TextStyle(color: Colors.white70, fontSize: 13),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                        ),
                       ),
+                      popupProps: const PopupProps.menu(
+                        showSearchBox: true,
+                        searchFieldProps: TextFieldProps(
+                          decoration: InputDecoration(
+                            hintText: 'Search suppliers...',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                        ),
+                      ),
+                      dropdownBuilder: (context, selectedItem) {
+                        if (selectedItem == null) {
+                          return Text(
+                            '( Select One )',
+                            style: const TextStyle(color: Colors.white, fontSize: 13),
+                          );
+                        }
+                        final supplier = _suppliers.firstWhere(
+                          (s) => s != null && (s['id']?.toString() ?? s['supplier_id']?.toString()) == selectedItem,
+                          orElse: () => {},
+                        );
+                        return Text(
+                          supplier['name'] ?? supplier['supplier_name'] ?? 'Unknown',
+                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                        );
+                      },
                     ),
                   ),
             const SizedBox(height: 16),

@@ -455,12 +455,32 @@ class _AccountsPayablePageState extends State<AccountsPayablePage> {
           children: [
             _buildLabel('Supplier / Vendor *'),
             _isLoadingSuppliers
-                ? const CircularProgressIndicator()
+                ? const Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6A5AE0)),
+                      ),
+                    ),
+                  )
                 : Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF566D7E),
-                      borderRadius: BorderRadius.circular(3),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF6A5AE0), Color(0xFF7C73E6)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: DropdownSearch<String>(
                       selectedItem: _selectedSupplier,
@@ -469,7 +489,7 @@ class _AccountsPayablePageState extends State<AccountsPayablePage> {
                           .map((s) => (s['id']?.toString() ?? s['supplier_id']?.toString())!)
                           .toList(),
                       itemAsString: (item) {
-                        if (item == null) return '( Select One )';
+                        if (item == null) return '( Select Supplier )';
                         final supplier = _suppliers.firstWhere(
                           (s) => s != null && (s['id']?.toString() ?? s['supplier_id']?.toString()) == item,
                           orElse: () => {},
@@ -479,36 +499,108 @@ class _AccountsPayablePageState extends State<AccountsPayablePage> {
                       onChanged: (val) => setState(() => _selectedSupplier = val),
                       dropdownDecoratorProps: const DropDownDecoratorProps(
                         dropdownSearchDecoration: InputDecoration(
-                          hintText: '( Select One )',
-                          hintStyle: TextStyle(color: Colors.white70, fontSize: 13),
+                          hintText: '( Select Supplier )',
+                          hintStyle: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500),
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
+                          contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 4),
                         ),
                       ),
-                      popupProps: const PopupProps.menu(
+                      popupProps: PopupProps.menu(
                         showSearchBox: true,
                         searchFieldProps: TextFieldProps(
                           decoration: InputDecoration(
                             hintText: 'Search suppliers...',
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            prefixIcon: const Icon(Icons.search, size: 20, color: Color(0xFF6A5AE0)),
+                            suffixIcon: const Icon(Icons.clear, size: 18, color: Colors.grey),
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            border: const OutlineInputBorder(
+                              borderRadius: BorderRadius.all(Radius.circular(12)),
+                              borderSide: BorderSide(width: 0),
+                            ),
+                            enabledBorder: const OutlineInputBorder(
+                              borderRadius: BorderRadius.all(Radius.circular(12)),
+                              borderSide: BorderSide(width: 0),
+                            ),
+                            focusedBorder: const OutlineInputBorder(
+                              borderRadius: BorderRadius.all(Radius.circular(12)),
+                              borderSide: BorderSide(color: Color(0xFF6A5AE0), width: 2),
+                            ),
                           ),
                         ),
+                        constraints: const BoxConstraints(maxHeight: 350),
+                        itemBuilder: (context, item, isSelected) {
+                          final supplier = _suppliers.firstWhere(
+                            (s) => s != null && (s['id']?.toString() ?? s['supplier_id']?.toString()) == item,
+                            orElse: () => {},
+                          );
+                          final supplierName = supplier['name'] ?? supplier['supplier_name'] ?? 'Unknown';
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: isSelected ? const Color(0xFFF0F0FF) : null,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: isSelected ? const Color(0xFF6A5AE0) : Colors.grey[400],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    supplierName,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                                      color: isSelected ? const Color(0xFF6A5AE0) : Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
                       dropdownBuilder: (context, selectedItem) {
                         if (selectedItem == null) {
-                          return Text(
-                            '( Select One )',
-                            style: const TextStyle(color: Colors.white, fontSize: 13),
+                          return Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            alignment: Alignment.centerLeft,
+                            child: const Text(
+                              '( Select Supplier )',
+                              style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500),
+                            ),
                           );
                         }
                         final supplier = _suppliers.firstWhere(
                           (s) => s != null && (s['id']?.toString() ?? s['supplier_id']?.toString()) == selectedItem,
                           orElse: () => {},
                         );
-                        return Text(
-                          supplier['name'] ?? supplier['supplier_name'] ?? 'Unknown',
-                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                        final supplierName = supplier['name'] ?? supplier['supplier_name'] ?? 'Unknown';
+
+                        return Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  supplierName,
+                                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.check_circle, color: Colors.white70, size: 18),
+                            ],
+                          ),
                         );
                       },
                     ),

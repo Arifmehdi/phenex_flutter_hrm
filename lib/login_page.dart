@@ -57,7 +57,12 @@ class _LoginPageState extends State<LoginPage> {
             orgId: orgId is int ? orgId : int.parse(orgId.toString()),
             userId: userId is int ? userId : int.parse(userId.toString()),
             token: token,
+            rememberMe: _rememberMe,
           );
+
+          // Save user and menu data for auto-login
+          await SessionManager.saveUserData(userData);
+          await SessionManager.saveMenuData(menuData);
 
           // Navigate to DashboardPage for all successful logins with dynamic menu
           if (mounted) {

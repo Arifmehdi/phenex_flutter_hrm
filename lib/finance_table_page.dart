@@ -529,8 +529,19 @@ class _FinanceFormSectionState extends State<_FinanceFormSection> {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF566D7E),
-          borderRadius: BorderRadius.circular(3),
+          gradient: const LinearGradient(
+            colors: [Color(0xFF6A5AE0), Color(0xFF7C73E6)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: DropdownSearch<String>(
           selectedItem: _selectedDealer,
@@ -556,35 +567,107 @@ class _FinanceFormSectionState extends State<_FinanceFormSection> {
           dropdownDecoratorProps: const DropDownDecoratorProps(
             dropdownSearchDecoration: InputDecoration(
               hintText: '( Select Dealer )',
-              hintStyle: TextStyle(color: Colors.white70, fontSize: 13),
+              hintStyle: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500),
               border: InputBorder.none,
-              contentPadding: EdgeInsets.zero,
+              contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 4),
             ),
           ),
-          popupProps: const PopupProps.menu(
+          popupProps: PopupProps.menu(
             showSearchBox: true,
             searchFieldProps: TextFieldProps(
               decoration: InputDecoration(
                 hintText: 'Search dealers...',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                prefixIcon: const Icon(Icons.search, size: 20, color: Color(0xFF6A5AE0)),
+                suffixIcon: const Icon(Icons.clear, size: 18, color: Colors.grey),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                border: const OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                  borderSide: BorderSide(width: 0),
+                ),
+                enabledBorder: const OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                  borderSide: BorderSide(width: 0),
+                ),
+                focusedBorder: const OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                  borderSide: BorderSide(color: Color(0xFF6A5AE0), width: 2),
+                ),
               ),
             ),
+            constraints: const BoxConstraints(maxHeight: 350),
+            itemBuilder: (context, item, isSelected) {
+              final dealer = _dealers.firstWhere(
+                (d) => d != null && (d['id']?.toString() ?? d['dealer_id']?.toString()) == item,
+                orElse: () => {},
+              );
+              final dealerName = dealer['name'] ?? dealer['dealer_name'] ?? dealer['company'] ?? 'Unknown';
+
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFFF0F0FF) : null,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isSelected ? const Color(0xFF6A5AE0) : Colors.grey[400],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        dealerName,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                          color: isSelected ? const Color(0xFF6A5AE0) : Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
           dropdownBuilder: (context, selectedItem) {
             if (selectedItem == null) {
-              return Text(
-                '( Select Dealer )',
-                style: const TextStyle(color: Colors.white, fontSize: 13),
+              return Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                alignment: Alignment.centerLeft,
+                child: const Text(
+                  '( Select Dealer )',
+                  style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500),
+                ),
               );
             }
             final dealer = _dealers.firstWhere(
               (d) => d != null && (d['id']?.toString() ?? d['dealer_id']?.toString()) == selectedItem,
               orElse: () => {},
             );
-            return Text(
-              dealer['name'] ?? dealer['dealer_name'] ?? dealer['company'] ?? 'Unknown',
-              style: const TextStyle(color: Colors.white, fontSize: 13),
+            final dealerName = dealer['name'] ?? dealer['dealer_name'] ?? dealer['company'] ?? 'Unknown';
+
+            return Container(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      dealerName,
+                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.check_circle, color: Colors.white70, size: 18),
+                ],
+              ),
             );
           },
         ),
@@ -594,8 +677,19 @@ class _FinanceFormSectionState extends State<_FinanceFormSection> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF566D7E),
-        borderRadius: BorderRadius.circular(3),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF6A5AE0), Color(0xFF7C73E6)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: DropdownSearch<String>(
         selectedItem: _selectedHead,
@@ -609,25 +703,89 @@ class _FinanceFormSectionState extends State<_FinanceFormSection> {
         dropdownDecoratorProps: const DropDownDecoratorProps(
           dropdownSearchDecoration: InputDecoration(
             hintText: '( Select One )',
-            hintStyle: TextStyle(color: Colors.white70, fontSize: 13),
+            hintStyle: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500),
             border: InputBorder.none,
-            contentPadding: EdgeInsets.zero,
+            contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 4),
           ),
         ),
-        popupProps: const PopupProps.menu(
+        popupProps: PopupProps.menu(
           showSearchBox: true,
           searchFieldProps: TextFieldProps(
             decoration: InputDecoration(
               hintText: 'Search heads...',
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              prefixIcon: const Icon(Icons.search, size: 20, color: Color(0xFF6A5AE0)),
+              suffixIcon: const Icon(Icons.clear, size: 18, color: Colors.grey),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              border: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+                borderSide: BorderSide(width: 0),
+              ),
+              enabledBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+                borderSide: BorderSide(width: 0),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+                borderSide: BorderSide(color: Color(0xFF6A5AE0), width: 2),
+              ),
             ),
           ),
+          constraints: const BoxConstraints(maxHeight: 300),
+          itemBuilder: (context, item, isSelected) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFFF0F0FF) : null,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSelected ? const Color(0xFF6A5AE0) : Colors.grey[400],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      item,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                        color: isSelected ? const Color(0xFF6A5AE0) : Colors.black87,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
         dropdownBuilder: (context, selectedItem) {
-          return Text(
-            selectedItem ?? '( Select One )',
-            style: const TextStyle(color: Colors.white, fontSize: 13),
+          return Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    selectedItem ?? '( Select One )',
+                    style: TextStyle(
+                      color: selectedItem == null ? Colors.white70 : Colors.white,
+                      fontSize: selectedItem == null ? 13 : 14,
+                      fontWeight: selectedItem == null ? FontWeight.w400 : FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (selectedItem != null)
+                  const Icon(Icons.check_circle, color: Colors.white70, size: 18),
+              ],
+            ),
           );
         },
       ),

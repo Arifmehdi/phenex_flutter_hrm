@@ -4,7 +4,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
 import 'dart:async';
+import 'dart:convert';
 import 'login_page.dart';
+import 'session_manager.dart';
+import 'employee_history_page.dart';
+import 'attendance_details_page.dart';
 
 class EmployeePanel extends StatefulWidget {
   const EmployeePanel({super.key});
@@ -101,8 +105,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   DateTime? _checkInDateTime;
   bool _isCheckedIn = false;
   bool _isCheckedOut = false;
+  bool _isLoading = false;
   late Timer _timer;
   DateTime _currentTime = DateTime.now();
+  List<dynamic> _recentAttendance = [];
 
   @override
   void initState() {
@@ -112,12 +118,227 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         _currentTime = DateTime.now();
       });
     });
+    _loadTodayStatus();
+    _loadRecentAttendance();
   }
 
   @override
   void dispose() {
     _timer.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadTodayStatus() async {
+    final orgId = await SessionManager.getOrgId();
+    final userData = await SessionManager.getUserData();
+
+    if (orgId == null || userData == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Session expired. Please login again.')),
+      );
+      return;
+    }
+
+    var employeeId = userData['employee_id'];
+    if (employeeId == null || employeeId.toString().isEmpty) {
+      employeeId = userData['id'];
+    }
+
+    if (employeeId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Employee ID not found.')),
+      );
+      return;
+    }
+
+    try {
+      final token = await SessionManager.getToken();
+
+      final response = await http.get(
+        Uri.parse(
+          'https://www.bs-org.com/index.php/api/Attendance/todayStatus?employee_id=$employeeId&orgID=$orgId',
+        ),
+        headers: {
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final body = response.body.trim();
+        if (body.startsWith('<!DOCTYPE') || body.startsWith('<html')) {
+          throw const FormatException('Server returned HTML instead of JSON');
+        }
+
+        final data = json.decode(body);
+        if (data['status'] == true) {
+          setState(() {
+            _isCheckedIn = data['checked_in'] ?? false;
+            _isCheckedOut = data['checked_out'] ?? false;
+
+            if (data['data'] != null) {
+              final attendanceData = data['data'];
+              final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+              if (attendanceData['time_in'] != null && attendanceData['time_in'] != '') {
+                _checkInTime = _formatTime(attendanceData['time_in']);
+                try {
+                  _checkInDateTime = DateTime.parse('$today ${attendanceData['time_in']}');
+                } catch (e) {
+                  debugPrint('Error parsing check-in time: $e');
+                }
+              }
+              if (attendanceData['time_out'] != null && attendanceData['time_out'] != '') {
+                _checkOutTime = _formatTime(attendanceData['time_out']);
+                if (_checkInDateTime != null) {
+                  try {
+                    final checkOutDateTime = DateTime.parse('$today ${attendanceData['time_out']}');
+                    final duration = checkOutDateTime.difference(_checkInDateTime!);
+                    final hours = duration.inHours.toString().padLeft(2, '0');
+                    final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
+                    _workingHours = '$hours:$minutes';
+                  } catch (e) {
+                    debugPrint('Error parsing check-out time: $e');
+                  }
+                }
+              }
+            }
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading attendance status: $e');
+    }
+  }
+
+  String _formatTime(String timeString) {
+    try {
+      if (timeString.isEmpty) return '--:--';
+      final parts = timeString.split(':');
+      if (parts.length >= 2) {
+        final time = DateFormat('HH:mm').parse('${parts[0]}:${parts[1]}');
+        return DateFormat('hh:mm a').format(time);
+      }
+      return timeString;
+    } catch (e) {
+      return timeString;
+    }
+  }
+
+  Future<void> _loadRecentAttendance() async {
+    debugPrint('_loadRecentAttendance: START');
+    final orgId = await SessionManager.getOrgId();
+    final userData = await SessionManager.getUserData();
+
+    debugPrint('_loadRecentAttendance: orgId=$orgId');
+    debugPrint('_loadRecentAttendance: userData keys: ${userData?.keys}');
+    debugPrint('_loadRecentAttendance: userData employee_id=${userData?['employee_id']}');
+    debugPrint('_loadRecentAttendance: userData id=${userData?['id']}');
+
+    if (orgId == null || userData == null) {
+      debugPrint('_loadRecentAttendance: session expired, aborting');
+      return;
+    }
+
+    var employeeId = userData['employee_id'];
+    if (employeeId == null || employeeId.toString().isEmpty) {
+      employeeId = userData['id'];
+    }
+
+    debugPrint('_loadRecentAttendance: Using employeeId=$employeeId');
+
+    if (employeeId == null) {
+      debugPrint('_loadRecentAttendance: employee ID not found, aborting');
+      return;
+    }
+
+    try {
+      final token = await SessionManager.getToken();
+      debugPrint('_loadRecentAttendance: Token present=${token != null}');
+
+      // Get last 7 days (or current month data)
+      // We'll fetch current month attendance like the details page
+      final now = DateTime.now();
+      final uri = Uri.parse(
+        'https://www.bs-org.com/index.php/api/Attendance/history/$employeeId',
+      ).replace(queryParameters: {
+        'month': now.month.toString(),
+        'year': now.year.toString(),
+        if (orgId != null) 'org_id': orgId.toString(),
+      });
+
+      debugPrint('_loadRecentAttendance: API URL = $uri');
+
+      final response = await http.get(
+        uri,
+        headers: {
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+
+      debugPrint('_loadRecentAttendance: HTTP status = ${response.statusCode}');
+      debugPrint('_loadRecentAttendance: Response body = ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        debugPrint('_loadRecentAttendance: Decoded JSON status: ${data['status']}');
+        if (data['status'] == true) {
+          final allRecords = data['attendance'] ?? data['data'] ?? [];
+          debugPrint('_loadRecentAttendance: Total records in API response: ${allRecords.length}');
+
+          // Log first few records to see structure
+          if (allRecords.isNotEmpty) {
+            debugPrint('_loadRecentAttendance: First record: ${allRecords.first}');
+          }
+
+          // Get last 7 days with records (limit to 7)
+          final recent = allRecords.take(7).toList();
+          debugPrint('_loadRecentAttendance: Taking first ${recent.length} records (limit 7)');
+
+          // Calculate status for each record
+          final datedRecords = recent.map((record) {
+            final timeIn = record['time_in']?.toString() ?? '';
+            final timeOut = record['time_out']?.toString() ?? '';
+            final punchCount = record['punch_count'];
+            final int punchCountInt = punchCount is int ? punchCount : int.tryParse(punchCount.toString()) ?? 0;
+
+            String status;
+            if (timeIn.isNotEmpty && timeOut.isNotEmpty) {
+              // Calculate work duration
+              try {
+                final timeInParse = DateFormat('HH:mm:ss').parse(timeIn);
+                final timeOutParse = DateFormat('HH:mm:ss').parse(timeOut);
+                Duration workDuration = timeOutParse.isBefore(timeInParse) ? Duration.zero : timeOutParse.difference(timeInParse);
+                final hours = workDuration.inHours;
+                status = hours >= 8 ? 'Present' : 'Late';
+                debugPrint('_loadRecentAttendance: Record date=${record['create_date']}, timeIn=$timeIn, timeOut=$timeOut, hours=$hours, status=$status');
+              } catch (e) {
+                debugPrint('_loadRecentAttendance: Error calculating duration: $e');
+                status = 'Present'; // fallback
+              }
+            } else {
+              status = 'Absent';
+              debugPrint('_loadRecentAttendance: Record date=${record['create_date']} is Absent (timeIn=$timeIn, timeOut=$timeOut)');
+            }
+
+            return {
+              ...record,
+              'status': status,
+            };
+          }).toList();
+
+          setState(() {
+            _recentAttendance = datedRecords;
+          });
+          debugPrint('_loadRecentAttendance: _recentAttendance now has ${_recentAttendance.length} records');
+        } else {
+          debugPrint('_loadRecentAttendance: API returned status=false');
+        }
+      } else {
+        debugPrint('_loadRecentAttendance: HTTP error ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('_loadRecentAttendance: EXCEPTION: $e');
+    }
+    debugPrint('_loadRecentAttendance: END');
   }
 
   Future<void> _takeCheckInPicture() async {
@@ -291,33 +512,57 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   Widget _buildAttendanceList() {
-    final history = [
-      {'date': 'Mar 01', 'in': '09:05 AM', 'out': '06:10 PM', 'status': 'Present'},
-      {'date': 'Feb 28', 'in': '08:55 AM', 'out': '06:05 PM', 'status': 'Present'},
-      {'date': 'Feb 27', 'in': '09:15 AM', 'out': '06:20 PM', 'status': 'Late'},
-      {'date': 'Feb 26', 'in': '--:--', 'out': '--:--', 'status': 'Absent'},
-    ];
+    debugPrint('_buildAttendanceList: _recentAttendance.length = ${_recentAttendance.length}');
+    if (_recentAttendance.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Text('No recent attendance records', style: TextStyle(color: Colors.grey)),
+        ),
+      );
+    }
 
-    return ListView.separated(
+    return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: history.length,
-      separatorBuilder: (context, index) => const Divider(),
+      itemCount: _recentAttendance.length,
       itemBuilder: (context, index) {
-        final item = history[index];
-        return ListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text(item['date']!, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text('In: ${item['in']} | Out: ${item['out']}'),
-          trailing: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: _getStatusColor(item['status']!).withOpacity(0.2),
-              borderRadius: BorderRadius.circular(20),
+        final record = _recentAttendance[index];
+        final date = record['create_date'] ?? record['date'] ?? 'N/A';
+        final timeIn = record['time_in'] ?? '';
+        final timeOut = record['time_out'] ?? '';
+        final status = record['status'] ?? 'Absent';
+
+        // Format time for display
+        String formattedTimeIn = timeIn.isNotEmpty ? _formatTime(timeIn) : '--:--';
+        String formattedTimeOut = timeOut.isNotEmpty ? _formatTime(timeOut) : '--:--';
+
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: ListTile(
+            leading: const Icon(Icons.calendar_today, color: Color(0xFF2E4560)),
+            title: Text(
+              date,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
-            child: Text(
-              item['status']!,
-              style: TextStyle(color: _getStatusColor(item['status']!), fontWeight: FontWeight.bold, fontSize: 12),
+            subtitle: Text(
+              'In: $formattedTimeIn | Out: $formattedTimeOut',
+              style: const TextStyle(fontSize: 12),
+            ),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: _getStatusColor(status).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                status,
+                style: TextStyle(
+                  color: _getStatusColor(status),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                ),
+              ),
             ),
           ),
         );
@@ -326,10 +571,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Present': return Colors.green;
-      case 'Late': return Colors.orange;
-      case 'Absent': return Colors.red;
+    switch (status?.toString().toLowerCase() ?? '') {
+      case 'present': return Colors.green;
+      case 'late': return Colors.orange;
+      case 'absent': return Colors.red;
       default: return Colors.grey;
     }
   }
@@ -460,11 +705,66 @@ class LeaveScreen extends StatelessWidget {
   }
 }
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
   @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  Map<String, dynamic>? _userData;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final userData = await SessionManager.getUserData();
+      debugPrint('ProfileScreen: Loaded userData from session: $userData');
+      debugPrint('ProfileScreen: employee_id from session: ${userData?['employee_id']}');
+      if (mounted) {
+        setState(() {
+          _userData = userData;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('ProfileScreen: Error loading user data: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_userData == null) {
+      return const Center(child: Text('Unable to load profile data'));
+    }
+
+    final employeeName = _userData!['employee_name'] ?? _userData!['name'] ?? 'Unknown';
+    final employeeId = _userData!['employee_id']?.toString() ?? _userData!['id']?.toString() ?? 'N/A';
+    final email = _userData!['email'] ?? _userData!['email_address'] ?? 'N/A';
+    final phone = _userData!['phone'] ?? _userData!['mobile'] ?? _userData!['phone_number'] ?? 'N/A';
+    final designation = _userData!['designation_name'] ?? _userData!['designation'] ?? 'Employee';
+    final department = _userData!['department_name'] ?? _userData!['department'] ?? 'N/A';
+    final joiningDate = _userData!['joining_date'] ?? _userData!['created_at'] ?? 'N/A';
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
       child: Column(
@@ -489,30 +789,63 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Sultan Ahmmed',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          Text(
+            employeeName,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
-          const Text(
-            'Senior Software Engineer',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
+          Text(
+            designation,
+            style: const TextStyle(fontSize: 16, color: Colors.grey),
           ),
           const SizedBox(height: 30),
-          _buildProfileInfoItem(Icons.badge, 'Employee ID', 'EMP-2026-001'),
-          _buildProfileInfoItem(Icons.email, 'Email', 'sultan.ahmmed@example.com'),
-          _buildProfileInfoItem(Icons.phone, 'Phone', '+880 1234 567890'),
-          _buildProfileInfoItem(Icons.business, 'Department', 'Software Development'),
-          _buildProfileInfoItem(Icons.calendar_month, 'Joining Date', 'Jan 01, 2024'),
+          _buildProfileInfoItem(Icons.badge, 'Employee ID', employeeId),
+          _buildProfileInfoItem(Icons.email, 'Email', email),
+          _buildProfileInfoItem(Icons.phone, 'Phone', phone),
+          _buildProfileInfoItem(Icons.business, 'Department', department),
+          _buildProfileInfoItem(Icons.calendar_month, 'Joining Date', joiningDate),
           const SizedBox(height: 20),
+
+          // View Full History Button
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {},
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => EmployeeHistoryPage(userData: _userData!),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.history, size: 20),
+              label: const Text('View Full History'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF2E4560),
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              child: const Text('Edit Profile', style: TextStyle(color: Colors.white)),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                // Navigate to detailed attendance page
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AttendanceDetailsPage(userData: _userData!),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.list, size: 20),
+              label: const Text('View Attendance Details'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.grey[700],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
             ),
           ),
         ],

@@ -2,16 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'dart:developer';
 import 'login_page.dart';
 import 'session_manager.dart';
 import 'employee_list_page.dart';
 import 'finance_table_page.dart';
 import 'accounts_payable_page.dart';
+import 'income_form_page.dart';
+import 'expense_form_page.dart';
+import 'expense_list_page.dart';
+import 'income_list_page.dart';
 import 'supplier_page.dart';
 import 'dealer_page.dart';
+import 'attendance_details_page.dart';
 
 class DashboardPage extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -29,7 +34,10 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   String? _selectedLink;
+  String? _selectedMenuName; // Store the menu item name to distinguish Add vs Manage
   bool _sidebarOpen = false;
+  Map<String, dynamic>? _incomeToEdit;
+  Map<String, dynamic>? _expenseToEdit;
 
   @override
   void initState() {
@@ -48,17 +56,25 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  void _onMenuSelected(String? link) {
+  void _onMenuSelected(String? link, [String? menuName]) {
     if (link != null && link != '#') {
+      debugPrint('Menu selected: link="$link", name="$menuName"');
       setState(() {
         _selectedLink = link;
+        _selectedMenuName = menuName;
       });
     }
   }
 
   Future<void> _handleLogout() async {
     try {
-      await SessionManager.clearSession();
+      // Check if remember me was enabled
+      final prefs = await SharedPreferences.getInstance();
+      final rememberMe = prefs.getBool('remember_me') ?? false;
+
+      // Clear session but keep credentials if remember me was checked
+      await SessionManager.clearSession(keepCredentials: rememberMe);
+
       await http.get(Uri.parse('https://www.bs-org.com/index.php/api/authentication/flutter_logout'));
     } catch (e) {
       // Log error if needed
@@ -88,13 +104,37 @@ class _DashboardPageState extends State<DashboardPage> {
             });
           },
         ),
-        title: const Text(
-          'BS',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            fontStyle: FontStyle.italic,
+        title: GestureDetector(
+          onTap: () {
+            // Reset to initial dashboard based on user credentials
+            final phone = widget.userData['phone']?.toString();
+            final name = widget.userData['name']?.toString().toLowerCase();
+            final orgName = widget.userData['org_name']?.toString().toLowerCase();
+
+            String? initialLink;
+            String? initialMenuName;
+            if (phone == '01717956334') {
+              initialLink = 'hrm/employeeDashboard';
+            } else if (name == 'icon2' || orgName == 'icon2' || phone == 'icon2') {
+              initialLink = 'hrm/employeeDashboard';
+            } else if (widget.menuData.isNotEmpty) {
+              initialLink = widget.menuData.first['link'];
+              initialMenuName = widget.menuData.first['name'];
+            }
+
+            setState(() {
+              _selectedLink = initialLink;
+              _selectedMenuName = initialMenuName;
+            });
+          },
+          child: const Text(
+            'BS',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              fontStyle: FontStyle.italic,
+            ),
           ),
         ),
         actions: [
@@ -108,7 +148,16 @@ class _DashboardPageState extends State<DashboardPage> {
             // Main content
             Column(
               children: [
-                if (_selectedLink != 'accounts/payable' && _selectedLink != 'accounts/receivable' && _selectedLink != 'hrm/employeeList')
+                if (_selectedLink != 'accounts/payable' &&
+                    _selectedLink != 'accounts/receivable' &&
+                    _selectedLink != 'hrm/employeeList' &&
+                    _selectedLink != 'accounts/expense' &&
+                    _selectedLink != 'expense' &&
+                    _selectedLink != 'accounts/expense/manage' &&
+                    _selectedLink != 'expense/manage' &&
+                    _selectedLink != 'accounts/income' &&
+                    _selectedLink != 'income' &&
+                    _selectedLink != 'accounts/income/manage')
                   const DashHeader(),
                 Expanded(
                   child: _buildMainContent(),
@@ -130,8 +179,8 @@ class _DashboardPageState extends State<DashboardPage> {
             if (_sidebarOpen)
               SidebarWidget(
                 menuData: widget.menuData,
-                onMenuSelected: (link) {
-                  _onMenuSelected(link);
+                onMenuSelected: (link, [menuName]) {
+                  _onMenuSelected(link, menuName);
                   setState(() {
                     _sidebarOpen = false;
                   });
@@ -145,8 +194,9 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildMainContent() {
-    if (_selectedLink == 'hrm/employeeDashboard' || 
-        _selectedLink == 'cms/dashboard' || 
+    debugPrint('_buildMainContent: _selectedLink = "$_selectedLink", _selectedMenuName = "$_selectedMenuName"');
+    if (_selectedLink == 'hrm/employeeDashboard' ||
+        _selectedLink == 'cms/dashboard' ||
         _selectedLink == 'dashboard/pharmaDashboard') {
        return EmployeeDashboard(
          isSidebarOpen: false,
@@ -165,6 +215,66 @@ class _DashboardPageState extends State<DashboardPage> {
        );
     } else if (_selectedLink == 'accounts/payable') {
       return const AccountsPayablePage();
+    // Income pages - differentiate by menu name if link is the same
+    } else if (_selectedLink != null &&
+               _selectedLink!.toLowerCase().contains('income')) {
+      final menuName = _selectedMenuName?.toLowerCase() ?? '';
+      if (menuName.contains('manage')) {
+        debugPrint('✓✓✓ Routing to IncomeListPage (manage income) for link: "$_selectedLink", menu: "$_selectedMenuName"');
+        return IncomeListPage(
+          onAddNew: () {
+            _onMenuSelected('accounts/income', 'Add Income');
+          },
+          onEditIncome: (income) {
+            setState(() {
+              _selectedLink = 'accounts/income';
+              _selectedMenuName = 'Edit Income';
+              _incomeToEdit = income;
+            });
+          },
+        );
+      } else {
+        debugPrint('✗✗✗ Routing to IncomeFormPage (add income) for link: "$_selectedLink", menu: "$_selectedMenuName"');
+        return IncomeFormPage(
+          incomeToEdit: _incomeToEdit,
+          onListTap: () {
+            _onMenuSelected('accounts/income', 'Manage Income');
+            setState(() {
+              _incomeToEdit = null;
+            });
+          },
+        );
+      }
+    // Expense pages - differentiate by menu name if link is the same
+    } else if (_selectedLink != null &&
+               _selectedLink!.toLowerCase().contains('expense')) {
+      final menuName = _selectedMenuName?.toLowerCase() ?? '';
+      if (menuName.contains('manage')) {
+        debugPrint('✓✓✓ Routing to ExpenseListPage (manage expense) for link: "$_selectedLink", menu: "$_selectedMenuName"');
+        return ExpenseListPage(
+          onAddNew: () {
+            _onMenuSelected('accounts/expense', 'Add Expense');
+          },
+          onEditExpense: (expense) {
+            setState(() {
+              _selectedLink = 'accounts/expense';
+              _selectedMenuName = 'Edit Expense';
+              _expenseToEdit = expense;
+            });
+          },
+        );
+      } else {
+        debugPrint('✗✗✗ Routing to ExpenseFormPage (add expense) for link: "$_selectedLink", menu: "$_selectedMenuName"');
+        return ExpenseFormPage(
+          expenseToEdit: _expenseToEdit,
+          onListTap: () {
+            _onMenuSelected('accounts/expense', 'Manage Expense');
+            setState(() {
+              _expenseToEdit = null;
+            });
+          },
+        );
+      }
     } else if (_selectedLink == 'accounts/receivable') {
       return const FinanceTablePage(title: 'Receivable');
     } else if (_selectedLink == 'accounts/supplier' ||
@@ -229,11 +339,11 @@ class _DashboardPageState extends State<DashboardPage> {
 
 class SidebarWidget extends StatefulWidget {
   final List<dynamic> menuData;
-  final Function(String?) onMenuSelected;
+  final Function(String?, [String?]) onMenuSelected;
   final String? selectedLink;
 
   const SidebarWidget({
-    super.key, 
+    super.key,
     required this.menuData,
     required this.onMenuSelected,
     this.selectedLink,
@@ -277,17 +387,26 @@ class _SidebarWidgetState extends State<SidebarWidget> {
       String? link = item['link'];
       String name = item['name'] ?? '';
       
-      // Fallback links for Payable/Receivable/Supplier/Dealer
+      // Fallback links for Payable/Receivable/Supplier/Dealer/Income/Expense
       if (link == null || link == '#') {
-        if (name.toLowerCase().contains('payable')) {
+        final lowerName = name.toLowerCase();
+        debugPrint('Building menu item: name="$name", lowerName="$lowerName"');
+        if (lowerName.contains('income')) {
+          link = 'accounts/income';
+        } else if (lowerName.contains('expense') && lowerName.contains('manage')) {
+          link = 'accounts/expense/manage';
+        } else if (lowerName.contains('expense')) {
+          link = 'accounts/expense';
+        } else if (lowerName.contains('payable')) {
           link = 'accounts/payable';
-        } else if (name.toLowerCase().contains('receivable')) {
+        } else if (lowerName.contains('receivable')) {
           link = 'accounts/receivable';
-        } else if (name.toLowerCase().contains('supplier')) {
+        } else if (lowerName.contains('supplier')) {
           link = 'accounts/supplier';
-        } else if (name.toLowerCase().contains('dealer')) {
+        } else if (lowerName.contains('dealer')) {
           link = 'dealer';
         }
+        debugPrint('Assigned link: $link');
       }
 
       return MegaMenuItem(
@@ -295,7 +414,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         link: link,
         level: level,
         active: widget.selectedLink == link,
-        onTap: () => widget.onMenuSelected(link),
+        onTap: () => widget.onMenuSelected(link, name),
         children: _buildMenuItems(children, level + 1),
       );
     }).toList();
@@ -1292,9 +1411,32 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             children: [
               _buildTodayStatusCard(),
               const SizedBox(height: 20),
-              const Text(
-                'Attendance History',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Attendance History',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => AttendanceDetailsPage(userData: widget.userData),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.list, size: 16),
+                    label: const Text('View Full Details'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2E4560),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 10),
               _buildAttendanceList(),

@@ -19,6 +19,23 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
+  @override
+  void initState() {
+    super.initState();
+    _loadStoredCredentials();
+  }
+
+  Future<void> _loadStoredCredentials() async {
+    final credentials = await SessionManager.getStoredCredentials();
+    if (credentials != null && mounted) {
+      setState(() {
+        _usernameController.text = credentials['phone']!;
+        _passwordController.text = credentials['password']!;
+        _rememberMe = true;
+      });
+    }
+  }
+
   Future<void> _handleLogin() async {
     final identifier = _usernameController.text.trim();
     final password = _passwordController.text.trim();
@@ -58,6 +75,8 @@ class _LoginPageState extends State<LoginPage> {
             userId: userId is int ? userId : int.parse(userId.toString()),
             token: token,
             rememberMe: _rememberMe,
+            phone: _usernameController.text.trim(),
+            password: _passwordController.text.trim(),
           );
 
           // Save user and menu data for auto-login
@@ -241,6 +260,9 @@ class _LoginPageState extends State<LoginPage> {
                                           onTap: () {
                                             setState(() {
                                               _rememberMe = !_rememberMe;
+                                              if (!_rememberMe) {
+                                                SessionManager.clearStoredCredentials();
+                                              }
                                             });
                                           },
                                           child: Row(
@@ -253,6 +275,9 @@ class _LoginPageState extends State<LoginPage> {
                                                   onChanged: (val) {
                                                     setState(() {
                                                       _rememberMe = val!;
+                                                      if (!_rememberMe) {
+                                                        SessionManager.clearStoredCredentials();
+                                                      }
                                                     });
                                                   },
                                                 ),

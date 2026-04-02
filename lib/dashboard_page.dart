@@ -10,6 +10,7 @@ import 'session_manager.dart';
 import 'employee_list_page.dart';
 import 'finance_table_page.dart';
 import 'accounts_payable_page.dart';
+import 'accounts_receivable_page.dart';
 import 'income_form_page.dart';
 import 'expense_form_page.dart';
 import 'expense_list_page.dart';
@@ -215,6 +216,8 @@ class _DashboardPageState extends State<DashboardPage> {
        );
     } else if (_selectedLink == 'accounts/payable') {
       return const AccountsPayablePage();
+    } else if (_selectedLink == 'accounts/receivable') {
+      return const AccountsReceivablePage();
     // Income pages - differentiate by menu name if link is the same
     } else if (_selectedLink != null &&
                _selectedLink!.toLowerCase().contains('income')) {
@@ -276,7 +279,14 @@ class _DashboardPageState extends State<DashboardPage> {
         );
       }
     } else if (_selectedLink == 'accounts/receivable') {
-      return const FinanceTablePage(title: 'Receivable');
+      // If menu name contains "new" or "++NEW", show form directly
+      final showForm = _selectedMenuName != null &&
+          (_selectedMenuName!.toLowerCase().contains('new') ||
+           _selectedMenuName!.contains('++NEW'));
+      return FinanceTablePage(
+        title: 'Receivable',
+        showFormInitially: showForm,
+      );
     } else if (_selectedLink == 'accounts/supplier' ||
                _selectedLink == 'supplier' ||
                _selectedLink == 'suppliers' ||

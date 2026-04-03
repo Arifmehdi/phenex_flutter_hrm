@@ -11,20 +11,27 @@ import 'employee_history_page.dart';
 import 'attendance_details_page.dart';
 
 class EmployeePanel extends StatefulWidget {
-  const EmployeePanel({super.key});
+  final int initialIndex;
+  const EmployeePanel({super.key, this.initialIndex = 0});
 
   @override
   State<EmployeePanel> createState() => _EmployeePanelState();
 }
 
 class _EmployeePanelState extends State<EmployeePanel> {
-  int _selectedIndex = 0;
+  late int _selectedIndex;
 
   static final List<Widget> _widgetOptions = <Widget>[
     const AttendanceScreen(),
     const LeaveScreen(),
     const ProfileScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedIndex = widget.initialIndex;
+  }
 
   void _onItemTapped(int index) {
     setState(() {

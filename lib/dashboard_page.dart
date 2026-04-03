@@ -18,6 +18,7 @@ import 'income_list_page.dart';
 import 'supplier_page.dart';
 import 'dealer_page.dart';
 import 'attendance_details_page.dart';
+import 'leave_management_page.dart';
 
 class DashboardPage extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -158,7 +159,8 @@ class _DashboardPageState extends State<DashboardPage> {
                     _selectedLink != 'expense/manage' &&
                     _selectedLink != 'accounts/income' &&
                     _selectedLink != 'income' &&
-                    _selectedLink != 'accounts/income/manage')
+                    _selectedLink != 'accounts/income/manage' &&
+                    _selectedLink != 'hrm/leaveApplication')
                   const DashHeader(),
                 Expanded(
                   child: _buildMainContent(),
@@ -206,7 +208,7 @@ class _DashboardPageState extends State<DashboardPage> {
     } else if (_selectedLink == 'hrm/employeeAttendance') {
        return AttendanceScreen(userData: widget.userData);
     } else if (_selectedLink == 'hrm/leaveApplication') {
-       return const LeaveApplicationPage();
+       return const LeaveManagementPage();
     } else if (_selectedLink == 'hrm/employeeList') {
        return const EmployeeListPage();
     } else if (_selectedLink == 'classicDashboard') {
@@ -682,15 +684,90 @@ class DashHeader extends StatelessWidget {
   }
 }
 
-class EmployeeDashboard extends StatelessWidget {
+class EmployeeDashboard extends StatefulWidget {
   final bool isSidebarOpen;
   final Function(String) onLinkSelected;
 
   const EmployeeDashboard({
-    super.key, 
+    super.key,
     required this.isSidebarOpen,
     required this.onLinkSelected,
   });
+
+  @override
+  State<EmployeeDashboard> createState() => _EmployeeDashboardState();
+}
+
+class _EmployeeDashboardState extends State<EmployeeDashboard> {
+  Map<String, dynamic>? _dashboardData;
+  bool _isLoading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDashboardData();
+  }
+
+  Future<void> _fetchDashboardData() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final orgId = await SessionManager.getOrgId();
+      final token = await SessionManager.getToken();
+
+      if (orgId == null) {
+        setState(() {
+          _error = 'Organization ID not found';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final url = Uri.parse('https://www.bs-org.com/index.php/api/AccountDashboard/getDashboard?orgID=$orgId');
+
+      final response = await http.get(
+        url,
+        headers: {
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final body = response.body.trim();
+        if (body.startsWith('<!DOCTYPE') || body.startsWith('<html')) {
+          throw const FormatException('Server returned HTML instead of JSON');
+        }
+
+        final data = json.decode(body);
+
+        if (data['status'] == true) {
+          setState(() {
+            _dashboardData = Map<String, dynamic>.from(data);
+            _isLoading = false;
+          });
+        } else {
+          setState(() {
+            _error = data['message'] ?? 'Failed to load dashboard data';
+            _isLoading = false;
+          });
+        }
+      } else {
+        setState(() {
+          _error = 'Server error: ${response.statusCode}';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'Error: $e';
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -703,7 +780,32 @@ class EmployeeDashboard extends StatelessWidget {
           const SizedBox(height: 10),
           const Divider(),
           const SizedBox(height: 10),
-          _buildDashboardGrid(),
+          _isLoading
+              ? const Center(child: Padding(
+                  padding: EdgeInsets.all(20.0),
+                  child: CircularProgressIndicator(),
+                ))
+              : _error != null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20.0),
+                        child: Column(
+                          children: [
+                            Text(
+                              _error!,
+                              style: const TextStyle(color: Colors.red),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 10),
+                            ElevatedButton(
+                              onPressed: _fetchDashboardData,
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : _buildDashboardGrid(),
           const SizedBox(height: 20),
           const Divider(),
           const SizedBox(height: 20),
@@ -714,14 +816,19 @@ class EmployeeDashboard extends StatelessWidget {
   }
 
   Widget _buildTopNavIcons() {
+    final attendance = _dashboardData?['attendance'] as Map<String, dynamic>?;
+    final present = attendance?['present']?.toString() ?? '0';
+    final leave = attendance?['leave']?.toString() ?? '0';
+    final absent = attendance?['absent']?.toString() ?? '0';
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _buildTopNavItem(Icons.qr_code, 'Attendance', '0', () => onLinkSelected('hrm/employeeAttendance')),
+        _buildTopNavItem(Icons.qr_code, 'Attendance', present, () => widget.onLinkSelected('hrm/employeeAttendance')),
         const SizedBox(width: 30),
-        _buildTopNavItem(Icons.qr_code, 'Leave', '0', () => onLinkSelected('hrm/leaveApplication')),
+        _buildTopNavItem(Icons.qr_code, 'Leave', leave, () => widget.onLinkSelected('hrm/leaveApplication')),
         const SizedBox(width: 30),
-        _buildTopNavItem(Icons.qr_code, 'Absent', '0', () {}),
+        _buildTopNavItem(Icons.qr_code, 'Absent', absent, () {}),
       ],
     );
   }
@@ -741,9 +848,47 @@ class EmployeeDashboard extends StatelessWidget {
   }
 
   Widget _buildDashboardGrid() {
+    final payment = _dashboardData?['payment'] as Map<String, dynamic>?;
+    final receive = _dashboardData?['receive'] as Map<String, dynamic>?;
+
+    final paymentCount = payment?['total_count']?.toString() ?? '0';
+    final paymentAmtRaw = payment?['total_amount']?.toString() ?? '';
+    final receiveCount = receive?['total_count']?.toString() ?? '0';
+    final receiveAmtRaw = receive?['total_amount']?.toString() ?? '';
+
+    // Format amounts with commas
+    String formatAmount(String amountStr) {
+      if (amountStr.isEmpty) return '';
+      try {
+        final amount = double.parse(amountStr);
+        return NumberFormat('#,##0', 'en_US').format(amount);
+      } catch (e) {
+        return amountStr;
+      }
+    }
+
+    final formattedPaymentAmt = formatAmount(paymentAmtRaw);
+    final formattedReceiveAmt = formatAmount(receiveAmtRaw);
+
     final List<Map<String, dynamic>> items = [
-      {'title': 'Payment || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFe8f0fe), 'btn': 'btn-blue', 'btnText': '✔ New Voucher', 'link': 'accounts/payable'},
-      {'title': 'Receive || Year-2026', 'val': '8', 'amt': '৳ : 179855.00', 'color': const Color(0xFFd9f5df), 'btn': 'btn-green', 'btnText': '✔ New Voucher', 'link': 'accounts/receivable'},
+      {
+        'title': 'Payment || Year-2026',
+        'val': paymentCount,
+        'amt': formattedPaymentAmt.isNotEmpty ? '৳ $formattedPaymentAmt' : '',
+        'color': const Color(0xFFe8f0fe),
+        'btn': 'btn-blue',
+        'btnText': '✔ New Voucher',
+        'link': 'accounts/payable'
+      },
+      {
+        'title': 'Receive || Year-2026',
+        'val': receiveCount,
+        'amt': formattedReceiveAmt.isNotEmpty ? '৳ $formattedReceiveAmt' : '',
+        'color': const Color(0xFFd9f5df),
+        'btn': 'btn-green',
+        'btnText': '✔ New Voucher',
+        'link': 'accounts/receivable'
+      },
       {'title': 'Journal || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFf8d7da), 'btn': 'btn-red', 'btnText': '✔ New Voucher'},
       {'title': 'Contra || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFd1ecf1), 'btn': 'btn-cyan', 'btnText': '✔ New Voucher'},
       {'title': 'Approve MRR || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFffe5c3), 'btn': 'btn-orange', 'btnText': '✔ View Approval'},
@@ -756,10 +901,10 @@ class EmployeeDashboard extends StatelessWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: isSidebarOpen ? 1 : 2,
+        crossAxisCount: widget.isSidebarOpen ? 1 : 2,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: isSidebarOpen ? 1.5 : 1.3,
+        childAspectRatio: widget.isSidebarOpen ? 1.5 : 1.3,
       ),
       itemCount: items.length,
       itemBuilder: (context, index) {
@@ -767,7 +912,7 @@ class EmployeeDashboard extends StatelessWidget {
         return InkWell(
           onTap: () {
             if (item['link'] != null) {
-              onLinkSelected(item['link']);
+              widget.onLinkSelected(item['link']);
             }
           },
           child: Container(
@@ -800,9 +945,9 @@ class EmployeeDashboard extends StatelessWidget {
                       child: Text(
                         item['amt'],
                         style: TextStyle(
-                          fontSize: 11, 
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: item['amt'].contains('179') || item['amt'].contains('325') ? Colors.green : Colors.black
+                          color: Colors.black
                         ),
                       ),
                     ),
@@ -815,7 +960,7 @@ class EmployeeDashboard extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: () {
                       if (item['link'] != null) {
-                        onLinkSelected(item['link']);
+                        widget.onLinkSelected(item['link']);
                       }
                     },
                     style: ElevatedButton.styleFrom(
@@ -893,7 +1038,7 @@ class EmployeeDashboard extends StatelessWidget {
                 Text(
                   item['link'] == 'open-green' ? '⬆ Open' : '⬇ Open',
                   style: TextStyle(
-                    fontSize: 11, 
+                    fontSize: 11,
                     fontWeight: FontWeight.bold,
                     color: item['link'] == 'open-green' ? Colors.green : Colors.red
                   ),
@@ -1651,12 +1796,12 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
         );
         return;
       }
-      
+
       // Simulate submission
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Leave application submitted successfully!')),
       );
-      
+
       setState(() {
         _selectedLeaveType = null;
         _startDate = null;
@@ -1668,16 +1813,18 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Apply for Leave',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
-          ),
-          const SizedBox(height: 20),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Leave Application'),
+        backgroundColor: const Color(0xFF2E4560),
+        foregroundColor: Colors.white,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+          const SizedBox(height: 0),
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1775,7 +1922,8 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
           _buildLeaveStatusList(),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildLeaveStatusList() {

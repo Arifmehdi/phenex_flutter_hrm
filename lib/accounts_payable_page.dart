@@ -50,7 +50,7 @@ class _AccountsPayablePageState extends State<AccountsPayablePage> {
   @override
   void initState() {
     super.initState();
-    _fromDate = DateTime.now().subtract(const Duration(days: 30));
+    _fromDate = DateTime.now();
     _toDate = DateTime.now();
     _fetchPayableList();
   }

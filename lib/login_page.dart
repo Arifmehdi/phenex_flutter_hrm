@@ -290,21 +290,42 @@ class _LoginPageState extends State<LoginPage> {
                                             ],
                                           ),
                                         ),
-                                        GestureDetector(
-                                          onTap: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(builder: (context) => const EmployeePanel()),
-                                            );
-                                          },
-                                          child: const Text(
-                                            'Employee',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: Color(0xFF2299CC),
-                                              decoration: TextDecoration.underline,
+                                        Row(
+                                          children: [
+                                            GestureDetector(
+                                              onTap: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(builder: (context) => const EmployeePanel()),
+                                                );
+                                              },
+                                              child: const Text(
+                                                'Employee',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: Color(0xFF2299CC),
+                                                  decoration: TextDecoration.underline,
+                                                ),
+                                              ),
                                             ),
-                                          ),
+                                            const SizedBox(width: 16),
+                                            GestureDetector(
+                                              onTap: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(builder: (context) => const LeaveApplicationPage()),
+                                                );
+                                              },
+                                              child: const Text(
+                                                'Apply',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: Color(0xFF2299CC),
+                                                  decoration: TextDecoration.underline,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),

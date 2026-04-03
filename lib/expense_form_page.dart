@@ -23,6 +23,12 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
   bool _isLoadingHeads = false;
   List<dynamic> _expenseHeads = [];
 
+  // Payable from expense feature
+  bool _isExpenseFromPayable = false;
+  bool _isLoadingPayables = false;
+  List<dynamic> _payableList = [];
+  String? _selectedPayableId;
+
   // Form State
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _payeeNameController = TextEditingController();
@@ -91,6 +97,47 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
     }
   }
 
+  Future<void> _fetchPayables() async {
+    setState(() => _isLoadingPayables = true);
+    try {
+      final session = await SessionManager.getSession();
+      final orgId = session['orgId'] ?? 106;
+
+      debugPrint('Fetching payables for expense with orgId: $orgId');
+
+      final response = await http.get(
+        Uri.parse('https://bs-org.com/index.php/api/Expense/getPayables?orgID=$orgId'),
+      );
+
+      debugPrint('Payable list response status: ${response.statusCode}');
+      debugPrint('Payable list response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        List<dynamic> fetchedPayables = [];
+
+        if (data is Map && data['payables'] != null) {
+          fetchedPayables = List.from(data['payables']);
+        } else if (data is Map && data['data'] != null) {
+          fetchedPayables = List.from(data['data']);
+        } else if (data is List) {
+          fetchedPayables = data;
+        }
+
+        setState(() {
+          _payableList = fetchedPayables;
+          _isLoadingPayables = false;
+        });
+        debugPrint('Fetched ${_payableList.length} payables');
+      } else {
+        setState(() => _isLoadingPayables = false);
+      }
+    } catch (e) {
+      debugPrint('Error fetching payables: $e');
+      setState(() => _isLoadingPayables = false);
+    }
+  }
+
 
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
@@ -103,6 +150,49 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
       setState(() {
         _dateController.text = DateFormat('yyyy-MM-dd').format(picked);
       });
+    }
+  }
+
+  void _onExpenseFromPayableCheckboxChanged(bool? value) {
+    setState(() {
+      _isExpenseFromPayable = value ?? false;
+      if (!_isExpenseFromPayable) {
+        // Clear payable selection and related fields
+        _selectedPayableId = null;
+        _amountController.clear();
+        _dateController.clear();
+      }
+    });
+
+    if (_isExpenseFromPayable && _payableList.isEmpty) {
+      _fetchPayables();
+    }
+  }
+
+  void _onPayableSelected(String? value) {
+    if (value == null || value.isEmpty) return;
+
+    final selectedPayable = _payableList.firstWhere(
+      (p) => p['id']?.toString() == value,
+      orElse: () => {},
+    );
+
+    if (selectedPayable.isNotEmpty) {
+      // Get values before setState for debugging
+      final supplierName = selectedPayable['supplier_name'] ?? selectedPayable['vendor_name'] ?? '';
+      final amount = selectedPayable['amount'] ?? selectedPayable['due_amount'] ?? '';
+      final scheduleDate = selectedPayable['schedule_date'] ?? selectedPayable['due_date'] ?? '';
+
+      setState(() {
+        _selectedPayableId = value;
+        // Auto-fill payee name, amount and date from payable
+        _payeeNameController.text = supplierName;
+        _amountController.text = amount.toString();
+        if (scheduleDate.isNotEmpty) {
+          _dateController.text = scheduleDate;
+        }
+      });
+      debugPrint('Payable selected: ID=$value, supplier=$supplierName, amount=$amount, date=$scheduleDate');
     }
   }
 
@@ -124,6 +214,11 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
           'expenseDate': _dateController.text.trim(),
           'content': _commentsController.text.trim(),
         };
+
+        // If expense from payable, add payable_id
+        if (_isExpenseFromPayable && _selectedPayableId != null) {
+          formData['payable_id'] = _selectedPayableId!;
+        }
 
         // Add optional fields if they have values
         if (_payeeNameController.text.trim().isNotEmpty) {
@@ -192,7 +287,7 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
     }
   }
 
-  void _editExpense(Map<String, dynamic> expense) {
+  Future<void> _editExpense(Map<String, dynamic> expense) async {
     setState(() {
       _editingExpenseId = expense['id'] is String
           ? int.tryParse(expense['id'].toString())
@@ -230,7 +325,25 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
       }
 
       _commentsController.text = expense['comments']?.toString() ?? '';
+
+      // Handle expense from payable checkbox
+      final payableId = expense['payable_id'];
+      if (payableId != null && payableId != 0 && payableId != '') {
+        _isExpenseFromPayable = true;
+        _selectedPayableId = payableId.toString();
+      } else {
+        _isExpenseFromPayable = false;
+        _selectedPayableId = null;
+      }
     });
+
+    // If expense from payable is checked, fetch payables
+    if (_isExpenseFromPayable && _selectedPayableId != null) {
+      if (_payableList.isEmpty) {
+        await _fetchPayables();
+      }
+      // Amount and date are already set from the expense data
+    }
   }
 
   void _deleteExpense(int id) async {
@@ -278,6 +391,8 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
       _amountController.clear();
       _dateController.clear();
       _commentsController.clear();
+      _isExpenseFromPayable = false;
+      _selectedPayableId = null;
     });
   }
 
@@ -378,6 +493,7 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
       padding: const EdgeInsets.all(16.0),
       child: Form(
         key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -531,20 +647,243 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
                           ),
                         );
                       },
+                      validator: (value) => value == null || value.isEmpty ? 'Please select an expense head' : null,
                     ),
                   ),
             const SizedBox(height: 16),
+
+            // Checkbox: Expense From Payable
+            Row(
+              children: [
+                Checkbox(
+                  value: _isExpenseFromPayable,
+                  onChanged: _onExpenseFromPayableCheckboxChanged,
+                  activeColor: const Color(0xFF0066CC),
+                ),
+                const Expanded(
+                  child: Text(
+                    'Expense From Payable',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+
+            // Payable Dropdown (conditionally visible)
+            _isExpenseFromPayable
+                ? Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF6A5AE0), Color(0xFF7C73E6)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: _isLoadingPayables
+                        ? const Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6A5AE0)),
+                              ),
+                            ),
+                          )
+                        : DropdownSearch<String>(
+                            selectedItem: _selectedPayableId,
+                            items: _payableList
+                                .where((p) => p != null && p['id'] != null)
+                                .map((p) => p['id'].toString())
+                                .toList(),
+                            itemAsString: (item) {
+                              final payable = _payableList.firstWhere(
+                                (p) => p != null && p['id']?.toString() == item,
+                                orElse: () => {},
+                              );
+                              final supplierName = payable['supplier_name'] ?? payable['vendor_name'] ?? 'Unknown Supplier';
+                              final amount = payable['amount'] ?? 0;
+                              final scheduleDate = payable['schedule_date'] ?? '';
+                              return '$supplierName - Amount: ${NumberFormat('#,##0.00').format(amount is num ? amount : double.tryParse(amount.toString()) ?? 0)} - Schedule Date: $scheduleDate';
+                            },
+                            onChanged: _onPayableSelected,
+                            dropdownDecoratorProps: const DropDownDecoratorProps(
+                              dropdownSearchDecoration: InputDecoration(
+                                hintText: '( Select Payable )',
+                                hintStyle: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500),
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+                              ),
+                            ),
+                            popupProps: PopupProps.menu(
+                              showSearchBox: true,
+                              searchFieldProps: TextFieldProps(
+                                decoration: InputDecoration(
+                                  hintText: 'Search payables...',
+                                  prefixIcon: const Icon(Icons.search, size: 20, color: Color(0xFF6A5AE0)),
+                                  suffixIcon: const Icon(Icons.clear, size: 18, color: Colors.grey),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                  border: const OutlineInputBorder(
+                                    borderRadius: BorderRadius.all(Radius.circular(12)),
+                                    borderSide: BorderSide(width: 0),
+                                  ),
+                                  enabledBorder: const OutlineInputBorder(
+                                    borderRadius: BorderRadius.all(Radius.circular(12)),
+                                    borderSide: BorderSide(width: 0),
+                                  ),
+                                  focusedBorder: const OutlineInputBorder(
+                                    borderRadius: BorderRadius.all(Radius.circular(12)),
+                                    borderSide: BorderSide(color: Color(0xFF6A5AE0), width: 2),
+                                  ),
+                                ),
+                              ),
+                              constraints: const BoxConstraints(maxHeight: 350),
+                              itemBuilder: (context, item, isSelected) {
+                                final payable = _payableList.firstWhere(
+                                  (p) => p != null && p['id']?.toString() == item,
+                                  orElse: () => {},
+                                );
+                                final supplierName = payable['supplier_name'] ?? payable['vendor_name'] ?? 'Unknown Supplier';
+                                final amount = payable['amount'] ?? 0;
+                                final scheduleDate = payable['schedule_date'] ?? '';
+
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? const Color(0xFFF0F0FF) : null,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: isSelected ? const Color(0xFF6A5AE0) : Colors.grey[400],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              supplierName,
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                                                color: isSelected ? const Color(0xFF6A5AE0) : Colors.black87,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'Amount: ${NumberFormat('#,##0.00').format(amount is num ? amount : double.tryParse(amount.toString()) ?? 0)} - Schedule: $scheduleDate',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                            dropdownBuilder: (context, selectedItem) {
+                              if (selectedItem == null) {
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  alignment: Alignment.centerLeft,
+                                  child: const Text(
+                                    '( Select Payable )',
+                                    style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500),
+                                  ),
+                                );
+                              }
+                              final payable = _payableList.firstWhere(
+                                (p) => p != null && p['id']?.toString() == selectedItem,
+                                orElse: () => {},
+                              );
+                              final supplierName = payable['supplier_name'] ?? payable['vendor_name'] ?? 'Unknown Supplier';
+                              final amount = payable['amount'] ?? 0;
+
+                              return Container(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        supplierName,
+                                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      NumberFormat('#,##0.00').format(amount is num ? amount : double.tryParse(amount.toString()) ?? 0),
+                                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Icon(Icons.check_circle, color: Colors.white70, size: 18),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        )
+                : const SizedBox.shrink(),
+
+            const SizedBox(height: 16),
             _buildLabel('Pay To *'),
-            _buildTextField(_payeeNameController, 'Payee Name'),
+            _buildTextField(
+              _payeeNameController,
+              'Payee Name',
+              validator: (value) => (value == null || value.isEmpty) ? 'Please enter payee name' : null,
+            ),
             const SizedBox(height: 16),
             _buildLabel('Contact No. *'),
-            _buildTextField(_contactNoController, 'Contact No.', isNumber: true),
+            _buildTextField(
+              _contactNoController,
+              'Contact No.',
+              isNumber: true,
+              validator: (value) => (value == null || value.isEmpty) ? 'Please enter contact number' : null,
+            ),
             const SizedBox(height: 16),
             _buildLabel('Expense Amount *'),
-            _buildTextField(_amountController, 'Expense Amount', isNumber: true),
+            _buildTextField(
+              _amountController,
+              'Expense Amount',
+              isNumber: true,
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter expense amount';
+                }
+                if (double.tryParse(value) == null) {
+                  return 'Please enter a valid number';
+                }
+                return null;
+              },
+            ),
             const SizedBox(height: 16),
             _buildLabel('Transaction Date *'),
-            _buildDateField(),
+            _buildDateField(
+              validator: (value) => (value == null || value.isEmpty) ? 'Please select transaction date' : null,
+            ),
             const SizedBox(height: 16),
             _buildLabel('Site Comments'),
             _buildTextField(_commentsController, 'Enter comments here...', maxLines: 3),
@@ -606,16 +945,18 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
     String hint, {
     bool isNumber = false,
     int maxLines = 1,
+    String? Function(String?)? validator,
   }) {
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: const Color(0xFFCCCCCC)),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: TextField(
+      child: TextFormField(
         controller: controller,
         keyboardType: isNumber ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
         maxLines: maxLines,
+        validator: validator,
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
@@ -626,7 +967,7 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
     );
   }
 
-  Widget _buildDateField() {
+  Widget _buildDateField({String? Function(String?)? validator}) {
     return GestureDetector(
       onTap: () => _selectDate(context),
       child: AbsorbPointer(
@@ -635,8 +976,9 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
             border: Border.all(color: const Color(0xFFCCCCCC)),
             borderRadius: BorderRadius.circular(4),
           ),
-          child: TextField(
+          child: TextFormField(
             controller: _dateController,
+            validator: validator,
             decoration: const InputDecoration(
               hintText: 'Select date',
               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),

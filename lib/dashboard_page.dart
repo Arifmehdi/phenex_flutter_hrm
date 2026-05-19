@@ -8,6 +8,7 @@ import 'login_page.dart';
 import 'session_manager.dart';
 import 'employee_list_page.dart';
 import 'finance_table_page.dart';
+import 'accounts_payable_page.dart';
 
 class DashboardPage extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -24,8 +25,8 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  bool _isSidebarOpen = false;
   String? _selectedLink;
+  bool _sidebarOpen = true;
 
   @override
   void initState() {
@@ -80,7 +81,7 @@ class _DashboardPageState extends State<DashboardPage> {
           icon: const Icon(Icons.menu, color: Colors.white),
           onPressed: () {
             setState(() {
-              _isSidebarOpen = !_isSidebarOpen;
+              _sidebarOpen = !_sidebarOpen;
             });
           },
         ),
@@ -97,29 +98,45 @@ class _DashboardPageState extends State<DashboardPage> {
           _buildUserArea(),
         ],
       ),
-      body: Row(
-        children: [
-          if (_isSidebarOpen) 
-            SidebarWidget(
-              menuData: widget.menuData,
-              onMenuSelected: _onMenuSelected,
-              selectedLink: _selectedLink,
+      body: Container(
+        color: const Color(0xFFE8E8E8),
+        child: Stack(
+          children: [
+            // Main content
+            Column(
+              children: [
+                if (_selectedLink != 'accounts/payable' && _selectedLink != 'accounts/receivable')
+                  const DashHeader(),
+                Expanded(
+                  child: _buildMainContent(),
+                ),
+              ],
             ),
-          Expanded(
-            child: Container(
-              color: const Color(0xFFE8E8E8),
-              child: Column(
-                children: [
-                  if (_selectedLink != 'accounts/payable' && _selectedLink != 'accounts/receivable')
-                    const DashHeader(),
-                  Expanded(
-                    child: _buildMainContent(),
-                  ),
-                ],
+            // Overlay menu
+            if (_sidebarOpen)
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _sidebarOpen = false;
+                  });
+                },
+                child: Container(
+                  color: Colors.black.withOpacity(0.3),
+                ),
               ),
-            ),
-          ),
-        ],
+            if (_sidebarOpen)
+              SidebarWidget(
+                menuData: widget.menuData,
+                onMenuSelected: (link) {
+                  _onMenuSelected(link);
+                  setState(() {
+                    _sidebarOpen = false;
+                  });
+                },
+                selectedLink: _selectedLink,
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -129,20 +146,22 @@ class _DashboardPageState extends State<DashboardPage> {
         _selectedLink == 'cms/dashboard' || 
         _selectedLink == 'dashboard/pharmaDashboard') {
        return EmployeeDashboard(
-         isSidebarOpen: _isSidebarOpen,
+         isSidebarOpen: false,
          onLinkSelected: _onMenuSelected,
        );
     } else if (_selectedLink == 'hrm/employeeAttendance') {
        return const AttendanceScreen();
     } else if (_selectedLink == 'hrm/leaveApplication') {
        return const LeaveApplicationPage();
+    } else if (_selectedLink == 'hrm/employeeList') {
+       return const EmployeeListPage();
     } else if (_selectedLink == 'classicDashboard') {
        return ClassicDashboard(
-         isSidebarOpen: _isSidebarOpen,
+         isSidebarOpen: false,
          onLinkSelected: _onMenuSelected,
        );
     } else if (_selectedLink == 'accounts/payable') {
-      return const FinanceTablePage(title: 'Payable');
+      return const AccountsPayablePage();
     } else if (_selectedLink == 'accounts/receivable') {
       return const FinanceTablePage(title: 'Receivable');
     }
@@ -150,7 +169,7 @@ class _DashboardPageState extends State<DashboardPage> {
     // Default to classic if nothing else matches but we have a selection
     if (_selectedLink != null) {
       return ClassicDashboard(
-        isSidebarOpen: _isSidebarOpen,
+        isSidebarOpen: false,
         onLinkSelected: _onMenuSelected,
       );
     }
@@ -386,10 +405,7 @@ class _MegaMenuItemState extends State<MegaMenuItem> {
             } else {
               if (widget.label.toLowerCase().contains('employee list') || 
                   widget.link == 'hrm/employeeList') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const EmployeeListPage()),
-                );
+                widget.onTap();
               } else {
                 widget.onTap();
               }
@@ -474,7 +490,7 @@ class _MegaMenuItemState extends State<MegaMenuItem> {
     if (label.contains('sale')) return Icons.shopping_cart;
     if (label.contains('inventory')) return Icons.inventory;
     if (label.contains('account')) return Icons.account_balance_wallet;
-    if (label.contains('payable')) return Icons.payments;
+    if (label.contains('payable')) return Icons.receipt_long;
     if (label.contains('receivable')) return Icons.call_received;
     if (label.contains('report')) return Icons.assessment;
     if (label.contains('setting')) return Icons.settings;

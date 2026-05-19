@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'dart:convert';
+import 'session_manager.dart';
 
 class FinanceTablePage extends StatefulWidget {
   final String title;
@@ -187,24 +190,23 @@ class _FinanceTablePageState extends State<FinanceTablePage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          RichText(
-            text: TextSpan(
-              style: const TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.bold),
-              children: [
-                TextSpan(text: '${_editingData != null ? "Edit" : "New"} ${widget.title} '),
-                WidgetSpan(
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _showForm = false;
-                        _editingData = null;
-                      });
-                    },
-                    child: const Icon(Icons.list, size: 16, color: Color(0xFFBA6D6D)),
-                  ),
-                ),
-              ],
-            ),
+          Row(
+            children: [
+              Text(
+                '${_editingData != null ? "Edit" : "New"} ${widget.title}',
+                style: const TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _showForm = false;
+                    _editingData = null;
+                  });
+                },
+                child: const Icon(Icons.list, size: 16, color: Color(0xFFBA6D6D)),
+              ),
+            ],
           ),
         ],
       ),
@@ -299,12 +301,12 @@ class _FinanceTablePageState extends State<FinanceTablePage> {
             verticalInside: BorderSide(color: Color(0xFFDDDDDD), width: 1),
             horizontalInside: BorderSide(color: Color(0xFFDDDDDD), width: 1),
           ),
-          columns: const [
-            DataColumn(label: Center(child: Text('SL#', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)))),
-            DataColumn(label: Center(child: Text('Head', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)))),
-            DataColumn(label: Center(child: Text('Amount', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)))),
-            DataColumn(label: Center(child: Text('Date', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)))),
-            DataColumn(label: Center(child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)))),
+          columns: [
+            const DataColumn(label: Center(child: Text('SL#', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)))),
+            DataColumn(label: Center(child: Text(widget.title.toLowerCase() == 'receivable' ? 'Dealer' : 'Head', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)))),
+            const DataColumn(label: Center(child: Text('Amount', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)))),
+            const DataColumn(label: Center(child: Text('Date', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)))),
+            const DataColumn(label: Center(child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)))),
           ],
           rows: [
             ...List.generate(3, (index) => _buildDataRow(index + 1)),
@@ -316,16 +318,17 @@ class _FinanceTablePageState extends State<FinanceTablePage> {
   }
 
   DataRow _buildDataRow(int sl) {
-    const String head = 'Office Rent';
+    final isReceivable = widget.title.toLowerCase() == 'receivable';
+    final String head = isReceivable ? 'Dealer A' : 'Office Rent';
     const double amount = 5000.00;
     const String date = '2026-03-01';
 
     return DataRow(
       cells: [
         DataCell(Center(child: Text(sl.toString(), style: const TextStyle(fontSize: 12)))),
-        const DataCell(Text(head, style: TextStyle(fontSize: 12))),
+        DataCell(Text(head, style: const TextStyle(fontSize: 12))),
         const DataCell(Align(alignment: Alignment.centerRight, child: Text('5,000.00', style: TextStyle(fontSize: 12)))),
-        const DataCell(Center(child: Text(date, style: TextStyle(fontSize: 12)))),
+        DataCell(Center(child: Text(date, style: const TextStyle(fontSize: 12)))),
         DataCell(
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -399,7 +402,11 @@ class _FinanceFormSectionState extends State<_FinanceFormSection> {
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _commentController = TextEditingController();
   String? _selectedHead;
+  String? _selectedDealer;
   bool _isEdit = false;
+
+  List<dynamic> _dealers = [];
+  bool _isLoadingDealers = false;
 
   final List<String> _heads = ['Office Rent', 'Salary', 'Electricity Bill', 'Internet Bill', 'Miscellaneous'];
 
@@ -408,15 +415,44 @@ class _FinanceFormSectionState extends State<_FinanceFormSection> {
     super.initState();
     _isEdit = widget.initialData != null;
     _transactionDate = DateTime.now();
-    
+
+    if (widget.title.toLowerCase() == 'receivable') {
+      _fetchDealers();
+    }
+
     if (_isEdit) {
       _selectedHead = widget.initialData!['head'];
+      _selectedDealer = widget.initialData!['dealer'];
       _amountController.text = widget.initialData!['amount'].toString().replaceAll(',', '');
+      _commentController.text = widget.initialData!['comment'] ?? '';
       if (widget.initialData!['date'] != null) {
         try {
           _transactionDate = DateTime.parse(widget.initialData!['date']);
         } catch (_) {}
       }
+    }
+  }
+
+  Future<void> _fetchDealers() async {
+    setState(() => _isLoadingDealers = true);
+    try {
+      final session = await SessionManager.getSession();
+      final orgId = session['orgId'] ?? 98;
+      final url = 'https://bs-org.com/index.php/api/Dealer/list?orgID=$orgId';
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is List) {
+          setState(() => _dealers = data);
+        } else if (data is Map && data['data'] != null) {
+          setState(() => _dealers = data['data']);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching dealers: $e');
+    } finally {
+      setState(() => _isLoadingDealers = false);
     }
   }
 
@@ -443,17 +479,21 @@ class _FinanceFormSectionState extends State<_FinanceFormSection> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildLabel('${widget.title} Head'),
+            if (widget.title.toLowerCase() == 'receivable') ...[
+              _buildLabel('Dealer / Customer *'),
+            ] else ...[
+              _buildLabel('${widget.title} Head'),
+            ],
             _buildDropdownField(),
             const SizedBox(height: 16),
             _buildLabel('${widget.title} Amount'),
             _buildTextField(_amountController, '${widget.title} Amount', isNumber: true),
             const SizedBox(height: 16),
-            _buildLabel('Transaction Date'),
+            _buildLabel(widget.title.toLowerCase() == 'receivable' ? 'Receivable Date' : 'Transaction Date'),
             _buildDateField(),
             const SizedBox(height: 16),
-            _buildLabel('Comments'),
-            _buildTextField(_commentController, 'Comments', maxLines: 3),
+            _buildLabel('Site Note'),
+            _buildTextField(_commentController, 'Site Note', maxLines: 3, isRequired: false),
             const SizedBox(height: 24),
             _buildFormActions(),
           ],
@@ -473,6 +513,49 @@ class _FinanceFormSectionState extends State<_FinanceFormSection> {
   }
 
   Widget _buildDropdownField() {
+    if (widget.title.toLowerCase() == 'receivable') {
+      if (_isLoadingDealers) {
+        return const Center(child: CircularProgressIndicator());
+      }
+
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF566D7E),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: _selectedDealer,
+            hint: const Text('( Select Dealer )', style: TextStyle(color: Colors.white70, fontSize: 13)),
+            dropdownColor: const Color(0xFF566D7E),
+            icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+            isExpanded: true,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            items: [
+              const DropdownMenuItem<String>(
+                value: null,
+                child: Text('( Select Dealer )', style: TextStyle(color: Color.fromARGB(179, 255, 255, 255))),
+              ),
+              ..._dealers.map((dealer) {
+                final dealerName = dealer['name'] ?? dealer['dealer_name'] ?? dealer['company'] ?? 'Unknown';
+                final dealerId = dealer['id']?.toString() ?? dealer['dealer_id']?.toString();
+                return DropdownMenuItem<String>(
+                  value: dealerId,
+                  child: Text(dealerName),
+                );
+              }).toList(),
+            ],
+            onChanged: (newValue) {
+              setState(() {
+                _selectedDealer = newValue;
+              });
+            },
+          ),
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
@@ -487,12 +570,18 @@ class _FinanceFormSectionState extends State<_FinanceFormSection> {
           icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
           isExpanded: true,
           style: const TextStyle(color: Colors.white, fontSize: 13),
-          items: _heads.map((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(value),
-            );
-          }).toList(),
+          items: [
+            const DropdownMenuItem<String>(
+              value: null,
+              child: Text('( Select Head )', style: TextStyle(color: Color.fromARGB(179, 255, 255, 255))),
+            ),
+            ..._heads.map((String value) {
+              return DropdownMenuItem<String>(
+                value: value,
+                child: Text(value),
+              );
+            }).toList(),
+          ],
           onChanged: (newValue) {
             setState(() {
               _selectedHead = newValue;
@@ -503,7 +592,7 @@ class _FinanceFormSectionState extends State<_FinanceFormSection> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String hint, {bool isNumber = false, int maxLines = 1}) {
+  Widget _buildTextField(TextEditingController controller, String hint, {bool isNumber = false, int maxLines = 1, bool isRequired = true}) {
     return TextFormField(
       controller: controller,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
@@ -524,6 +613,7 @@ class _FinanceFormSectionState extends State<_FinanceFormSection> {
         fillColor: const Color(0xFFF9F9F9),
       ),
       validator: (value) {
+        if (!isRequired) return null;
         if (value == null || value.isEmpty) {
           return 'Please enter $hint';
         }
@@ -562,6 +652,14 @@ class _FinanceFormSectionState extends State<_FinanceFormSection> {
       children: [
         ElevatedButton(
           onPressed: () {
+            final isReceivable = widget.title.toLowerCase() == 'receivable';
+            if (isReceivable && (_selectedDealer == null || _selectedDealer!.isEmpty)) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Please select Dealer / Customer')),
+              );
+              return;
+            }
+
             if (_formKey.currentState!.validate()) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('${_isEdit ? "Updating" : "Saving"} data...')),
@@ -593,7 +691,10 @@ class _FinanceFormSectionState extends State<_FinanceFormSection> {
               _formKey.currentState!.reset();
               setState(() {
                 _selectedHead = null;
+                _selectedDealer = null;
                 _transactionDate = DateTime.now();
+                _amountController.clear();
+                _commentController.clear();
               });
             },
             style: ElevatedButton.styleFrom(

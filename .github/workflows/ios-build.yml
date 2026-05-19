@@ -42,3 +42,11 @@ jobs:
 
       - name: Build iOS (no code signing)
         run: flutter build ios --release --no-codesign
+
+        
+      # ✅ THIS IS THE MISSING PART (artifact export)
+      - name: Upload iOS build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build
+          path: build/ios/iphoneos/Runner.app

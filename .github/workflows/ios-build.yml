@@ -2,9 +2,7 @@ name: iOS Build
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   build:
@@ -17,22 +15,26 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: stable
+          cache: true
+
+      - name: Flutter Doctor
+        run: flutter doctor -v
 
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Build iOS
-        run: flutter build ios --release --no-codesign
-
-      - name: Package as IPA (for Windows users)
+      - name: Install CocoaPods
         run: |
-          mkdir -p Payload
-          mv build/ios/iphoneos/Runner.app Payload/
-          zip -r ios-app.ipa Payload
+          cd ios
+          pod install --repo-update
+          cd ..
+
+      - name: Build IPA
+        run: flutter build ipa --release --no-codesign
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Business-Solution-iOS
-          path: ios-app.ipa
+          path: build/ios/ipa/*.ipa

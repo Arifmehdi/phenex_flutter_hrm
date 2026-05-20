@@ -9,6 +9,7 @@ import 'session_manager.dart';
 import 'employee_list_page.dart';
 import 'finance_table_page.dart';
 import 'accounts_payable_page.dart';
+import 'company_cashbook_page.dart';
 
 class DashboardPage extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -48,7 +49,7 @@ class _DashboardPageState extends State<DashboardPage> {
   void _onMenuSelected(String? link) {
     if (link != null && link != '#') {
       setState(() {
-        _selectedLink = link;
+        _selectedLink = link.toLowerCase();
       });
     }
   }
@@ -105,7 +106,8 @@ class _DashboardPageState extends State<DashboardPage> {
             // Main content
             Column(
               children: [
-                if (_selectedLink != 'accounts/payable' && _selectedLink != 'accounts/receivable')
+                if (_selectedLink != 'accounts/payable' && 
+                    _selectedLink != 'accounts/receivable')
                   const DashHeader(),
                 Expanded(
                   child: _buildMainContent(),
@@ -142,28 +144,32 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildMainContent() {
-    if (_selectedLink == 'hrm/employeeDashboard' || 
-        _selectedLink == 'cms/dashboard' || 
-        _selectedLink == 'dashboard/pharmaDashboard') {
+    final link = _selectedLink?.toLowerCase();
+    
+    if (link == 'hrm/employeedashboard' || 
+        link == 'cms/dashboard' || 
+        link == 'dashboard/pharmadashboard') {
        return EmployeeDashboard(
          isSidebarOpen: false,
          onLinkSelected: _onMenuSelected,
        );
-    } else if (_selectedLink == 'hrm/employeeAttendance') {
+    } else if (link == 'hrm/employeeattendance') {
        return const AttendanceScreen();
-    } else if (_selectedLink == 'hrm/leaveApplication') {
+    } else if (link == 'hrm/leaveapplication') {
        return const LeaveApplicationPage();
-    } else if (_selectedLink == 'hrm/employeeList') {
+    } else if (link == 'hrm/employeelist') {
        return const EmployeeListPage();
-    } else if (_selectedLink == 'classicDashboard') {
+    } else if (link == 'classicdashboard') {
        return ClassicDashboard(
          isSidebarOpen: false,
          onLinkSelected: _onMenuSelected,
        );
-    } else if (_selectedLink == 'accounts/payable') {
+    } else if (link == 'accounts/payable') {
       return const AccountsPayablePage();
-    } else if (_selectedLink == 'accounts/receivable') {
+    } else if (link == 'accounts/receivable') {
       return const FinanceTablePage(title: 'Receivable');
+    } else if (link == 'accounts/cashbook') {
+      return const CompanyCashbookPage();
     }
     
     // Default to classic if nothing else matches but we have a selection
@@ -268,6 +274,8 @@ class _SidebarWidgetState extends State<SidebarWidget> {
           link = 'accounts/payable';
         } else if (name.toLowerCase().contains('receivable')) {
           link = 'accounts/receivable';
+        } else if (name.toLowerCase().contains('cashbook')) {
+          link = 'accounts/cashbook';
         }
       }
 
@@ -275,7 +283,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         label: name,
         link: link,
         level: level,
-        active: widget.selectedLink == link,
+        active: widget.selectedLink == (link?.toLowerCase()),
         onTap: () => widget.onMenuSelected(link),
         children: _buildMenuItems(children, level + 1),
       );
@@ -596,6 +604,7 @@ class EmployeeDashboard extends StatelessWidget {
     final List<Map<String, dynamic>> items = [
       {'title': 'Payment || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFe8f0fe), 'btn': 'btn-blue', 'btnText': '✔ New Voucher', 'link': 'accounts/payable'},
       {'title': 'Receive || Year-2026', 'val': '8', 'amt': '৳ : 179855.00', 'color': const Color(0xFFd9f5df), 'btn': 'btn-green', 'btnText': '✔ New Voucher', 'link': 'accounts/receivable'},
+      {'title': 'Cashbook || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFfff9db), 'btn': 'btn-orange', 'btnText': '✔ View Cashbook', 'link': 'accounts/cashbook'},
       {'title': 'Journal || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFf8d7da), 'btn': 'btn-red', 'btnText': '✔ New Voucher'},
       {'title': 'Contra || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFd1ecf1), 'btn': 'btn-cyan', 'btnText': '✔ New Voucher'},
       {'title': 'Approve MRR || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFffe5c3), 'btn': 'btn-orange', 'btnText': '✔ View Approval'},

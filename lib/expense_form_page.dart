@@ -28,6 +28,7 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
   bool _isLoadingPayables = false;
   List<dynamic> _payableList = [];
   String? _selectedPayableId;
+  String? _selectedVendorId;
 
   // Form State
   final _formKey = GlobalKey<FormState>();
@@ -159,6 +160,8 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
       if (!_isExpenseFromPayable) {
         // Clear payable selection and related fields
         _selectedPayableId = null;
+        _selectedVendorId = null;
+        _payeeNameController.clear();
         _amountController.clear();
         _dateController.clear();
       }
@@ -182,9 +185,11 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
       final supplierName = selectedPayable['supplier_name'] ?? selectedPayable['vendor_name'] ?? '';
       final amount = selectedPayable['amount'] ?? selectedPayable['due_amount'] ?? '';
       final scheduleDate = selectedPayable['schedule_date'] ?? selectedPayable['due_date'] ?? '';
+      final vendorId = selectedPayable['vendor_id']?.toString();
 
       setState(() {
         _selectedPayableId = value;
+        _selectedVendorId = vendorId;
         // Auto-fill payee name, amount and date from payable
         _payeeNameController.text = supplierName;
         _amountController.text = amount.toString();
@@ -192,7 +197,7 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
           _dateController.text = scheduleDate;
         }
       });
-      debugPrint('Payable selected: ID=$value, supplier=$supplierName, amount=$amount, date=$scheduleDate');
+      debugPrint('Payable selected: ID=$value, vendorId=$vendorId, supplier=$supplierName, amount=$amount, date=$scheduleDate');
     }
   }
 
@@ -209,15 +214,24 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
         // Prepare form data
         Map<String, String> formData = {
           'orgID': orgId.toString(),
-          'expenseHead': _selectedExpenseHead ?? '',
           'expenseAmount': _amountController.text.trim(),
           'expenseDate': _dateController.text.trim(),
           'content': _commentsController.text.trim(),
         };
 
-        // If expense from payable, add payable_id
-        if (_isExpenseFromPayable && _selectedPayableId != null) {
-          formData['payable_id'] = _selectedPayableId!;
+        // Only add expenseHead if not using payable (or if selected manually alongside payable)
+        if (_selectedExpenseHead != null && _selectedExpenseHead!.isNotEmpty) {
+          formData['expenseHead'] = _selectedExpenseHead!;
+        }
+
+        // If expense from payable, add vendor_id AND payable_id
+        if (_isExpenseFromPayable) {
+          if (_selectedVendorId != null) {
+            formData['vendor_id'] = _selectedVendorId!;
+          }
+          if (_selectedPayableId != null) {
+            formData['payable_id'] = _selectedPayableId!;
+          }
         }
 
         // Add optional fields if they have values
@@ -393,6 +407,7 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
       _commentsController.clear();
       _isExpenseFromPayable = false;
       _selectedPayableId = null;
+      _selectedVendorId = null;
     });
   }
 
@@ -647,7 +662,13 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
                           ),
                         );
                       },
-                      validator: (value) => value == null || value.isEmpty ? 'Please select an expense head' : null,
+                      validator: (value) {
+                        // If expense is from payable, expense head is optional (API will auto-create from vendor)
+                        if (_isExpenseFromPayable && _selectedPayableId != null) {
+                          return null;
+                        }
+                        return value == null || value.isEmpty ? 'Please select an expense head' : null;
+                      },
                     ),
                   ),
             const SizedBox(height: 16),

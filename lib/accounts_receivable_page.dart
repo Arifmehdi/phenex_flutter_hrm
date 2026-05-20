@@ -63,7 +63,10 @@ class _AccountsReceivablePageState extends State<AccountsReceivablePage> {
 
       debugPrint('Fetching receivable list with orgId: $orgId');
 
-      final url = 'https://bs-org.com/index.php/api/Receivable/list?orgID=$orgId';
+      // Build date range from _fromDate and _toDate
+      final fromDateStr = DateFormat('yyyy-MM-dd').format(_fromDate);
+      final toDateStr = DateFormat('yyyy-MM-dd').format(_toDate);
+      final url = 'https://bs-org.com/index.php/api/Receivable/list?orgID=$orgId&start=$fromDateStr&end=$toDateStr';
 
       final response = await http.get(
         Uri.parse(url),

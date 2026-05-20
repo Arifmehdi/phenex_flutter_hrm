@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'login_page.dart';
@@ -9,7 +10,17 @@ import 'session_manager.dart';
 import 'employee_list_page.dart';
 import 'finance_table_page.dart';
 import 'accounts_payable_page.dart';
+
 import 'company_cashbook_page.dart';
+import 'accounts_receivable_page.dart';
+import 'income_form_page.dart';
+import 'expense_form_page.dart';
+import 'expense_list_page.dart';
+import 'income_list_page.dart';
+import 'supplier_page.dart';
+import 'dealer_page.dart';
+import 'attendance_details_page.dart';
+import 'leave_management_page.dart';
 
 class DashboardPage extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -27,7 +38,11 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   String? _selectedLink;
-  bool _sidebarOpen = true;
+  String?
+  _selectedMenuName; // Store the menu item name to distinguish Add vs Manage
+  bool _sidebarOpen = false;
+  Map<String, dynamic>? _incomeToEdit;
+  Map<String, dynamic>? _expenseToEdit;
 
   @override
   void initState() {
@@ -40,24 +55,36 @@ class _DashboardPageState extends State<DashboardPage> {
     if (phone == '01717956334') {
       _selectedLink = 'hrm/employeeDashboard';
     } else if (name == 'icon2' || orgName == 'icon2' || phone == 'icon2') {
-      _selectedLink = 'classicDashboard';
+      _selectedLink = 'hrm/employeeDashboard';
     } else if (widget.menuData.isNotEmpty) {
       _selectedLink = widget.menuData.first['link'];
     }
   }
 
-  void _onMenuSelected(String? link) {
+  void _onMenuSelected(String? link, [String? menuName]) {
     if (link != null && link != '#') {
+      debugPrint('Menu selected: link="$link", name="$menuName"');
       setState(() {
-        _selectedLink = link.toLowerCase();
+        _selectedLink = link;
+        _selectedMenuName = menuName;
       });
     }
   }
 
   Future<void> _handleLogout() async {
     try {
-      await SessionManager.clearSession();
-      await http.get(Uri.parse('https://www.bs-org.com/index.php/api/authentication/flutter_logout'));
+      // Check if remember me was enabled
+      final prefs = await SharedPreferences.getInstance();
+      final rememberMe = prefs.getBool('remember_me') ?? false;
+
+      // Clear session but keep credentials if remember me was checked
+      await SessionManager.clearSession(keepCredentials: rememberMe);
+
+      await http.get(
+        Uri.parse(
+          'https://www.bs-org.com/index.php/api/authentication/flutter_logout',
+        ),
+      );
     } catch (e) {
       // Log error if needed
     } finally {
@@ -86,18 +113,44 @@ class _DashboardPageState extends State<DashboardPage> {
             });
           },
         ),
-        title: const Text(
-          'BS',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            fontStyle: FontStyle.italic,
+        title: GestureDetector(
+          onTap: () {
+            // Reset to initial dashboard based on user credentials
+            final phone = widget.userData['phone']?.toString();
+            final name = widget.userData['name']?.toString().toLowerCase();
+            final orgName = widget.userData['org_name']
+                ?.toString()
+                .toLowerCase();
+
+            String? initialLink;
+            String? initialMenuName;
+            if (phone == '01717956334') {
+              initialLink = 'hrm/employeeDashboard';
+            } else if (name == 'icon2' ||
+                orgName == 'icon2' ||
+                phone == 'icon2') {
+              initialLink = 'hrm/employeeDashboard';
+            } else if (widget.menuData.isNotEmpty) {
+              initialLink = widget.menuData.first['link'];
+              initialMenuName = widget.menuData.first['name'];
+            }
+
+            setState(() {
+              _selectedLink = initialLink;
+              _selectedMenuName = initialMenuName;
+            });
+          },
+          child: const Text(
+            'BS',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              fontStyle: FontStyle.italic,
+            ),
           ),
         ),
-        actions: [
-          _buildUserArea(),
-        ],
+        actions: [_buildUserArea()],
       ),
       body: Container(
         color: const Color(0xFFE8E8E8),
@@ -106,12 +159,19 @@ class _DashboardPageState extends State<DashboardPage> {
             // Main content
             Column(
               children: [
-                if (_selectedLink != 'accounts/payable' && 
-                    _selectedLink != 'accounts/receivable')
+                if (_selectedLink != 'accounts/payable' &&
+                    _selectedLink != 'accounts/receivable' &&
+                    _selectedLink != 'hrm/employeeList' &&
+                    _selectedLink != 'accounts/expense' &&
+                    _selectedLink != 'expense' &&
+                    _selectedLink != 'accounts/expense/manage' &&
+                    _selectedLink != 'expense/manage' &&
+                    _selectedLink != 'accounts/income' &&
+                    _selectedLink != 'income' &&
+                    _selectedLink != 'accounts/income/manage' &&
+                    _selectedLink != 'hrm/leaveApplication')
                   const DashHeader(),
-                Expanded(
-                  child: _buildMainContent(),
-                ),
+                Expanded(child: _buildMainContent()),
               ],
             ),
             // Overlay menu
@@ -122,15 +182,13 @@ class _DashboardPageState extends State<DashboardPage> {
                     _sidebarOpen = false;
                   });
                 },
-                child: Container(
-                  color: Colors.black.withOpacity(0.3),
-                ),
+                child: Container(color: Colors.black.withOpacity(0.3)),
               ),
             if (_sidebarOpen)
               SidebarWidget(
                 menuData: widget.menuData,
-                onMenuSelected: (link) {
-                  _onMenuSelected(link);
+                onMenuSelected: (link, [menuName]) {
+                  _onMenuSelected(link, menuName);
                   setState(() {
                     _sidebarOpen = false;
                   });
@@ -145,33 +203,120 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _buildMainContent() {
     final link = _selectedLink?.toLowerCase();
-    
-    if (link == 'hrm/employeedashboard' || 
-        link == 'cms/dashboard' || 
-        link == 'dashboard/pharmadashboard') {
-       return EmployeeDashboard(
-         isSidebarOpen: false,
-         onLinkSelected: _onMenuSelected,
-       );
-    } else if (link == 'hrm/employeeattendance') {
-       return const AttendanceScreen();
-    } else if (link == 'hrm/leaveapplication') {
-       return const LeaveApplicationPage();
-    } else if (link == 'hrm/employeelist') {
-       return const EmployeeListPage();
+
+    if (_selectedLink == 'hrm/employeeDashboard' ||
+        _selectedLink == 'cms/dashboard' ||
+        _selectedLink == 'dashboard/pharmaDashboard') {
+      return EmployeeDashboard(
+        isSidebarOpen: false,
+        onLinkSelected: _onMenuSelected,
+      );
+    } else if (_selectedLink == 'hrm/employeeAttendance') {
+      return AttendanceScreen(userData: widget.userData);
+    } else if (_selectedLink == 'hrm/leaveApplication') {
+      return const LeaveManagementPage();
+    } else if (_selectedLink == 'hrm/employeeList') {
+      return const EmployeeListPage();
     } else if (link == 'classicdashboard') {
-       return ClassicDashboard(
-         isSidebarOpen: false,
-         onLinkSelected: _onMenuSelected,
-       );
+      return ClassicDashboard(
+        isSidebarOpen: false,
+        onLinkSelected: _onMenuSelected,
+      );
     } else if (link == 'accounts/payable') {
       return const AccountsPayablePage();
-    } else if (link == 'accounts/receivable') {
-      return const FinanceTablePage(title: 'Receivable');
     } else if (link == 'accounts/cashbook') {
       return const CompanyCashbookPage();
+    } else if (_selectedLink == 'accounts/receivable') {
+      return const AccountsReceivablePage();
+      // Income pages - differentiate by menu name if link is the same
+    } else if (_selectedLink != null &&
+        _selectedLink!.toLowerCase().contains('income')) {
+      final menuName = _selectedMenuName?.toLowerCase() ?? '';
+      if (menuName.contains('manage')) {
+        debugPrint(
+          '✓✓✓ Routing to IncomeListPage (manage income) for link: "$_selectedLink", menu: "$_selectedMenuName"',
+        );
+        return IncomeListPage(
+          onAddNew: () {
+            _onMenuSelected('accounts/income', 'Add Income');
+          },
+          onEditIncome: (income) {
+            setState(() {
+              _selectedLink = 'accounts/income';
+              _selectedMenuName = 'Edit Income';
+              _incomeToEdit = income;
+            });
+          },
+        );
+      } else {
+        debugPrint(
+          '✗✗✗ Routing to IncomeFormPage (add income) for link: "$_selectedLink", menu: "$_selectedMenuName"',
+        );
+        return IncomeFormPage(
+          incomeToEdit: _incomeToEdit,
+          onListTap: () {
+            _onMenuSelected('accounts/income', 'Manage Income');
+            setState(() {
+              _incomeToEdit = null;
+            });
+          },
+        );
+      }
+      // Expense pages - differentiate by menu name if link is the same
+    } else if (_selectedLink != null &&
+        _selectedLink!.toLowerCase().contains('expense')) {
+      final menuName = _selectedMenuName?.toLowerCase() ?? '';
+      if (menuName.contains('manage')) {
+        debugPrint(
+          '✓✓✓ Routing to ExpenseListPage (manage expense) for link: "$_selectedLink", menu: "$_selectedMenuName"',
+        );
+        return ExpenseListPage(
+          onAddNew: () {
+            _onMenuSelected('accounts/expense', 'Add Expense');
+          },
+          onEditExpense: (expense) {
+            setState(() {
+              _selectedLink = 'accounts/expense';
+              _selectedMenuName = 'Edit Expense';
+              _expenseToEdit = expense;
+            });
+          },
+        );
+      } else {
+        debugPrint(
+          '✗✗✗ Routing to ExpenseFormPage (add expense) for link: "$_selectedLink", menu: "$_selectedMenuName"',
+        );
+        return ExpenseFormPage(
+          expenseToEdit: _expenseToEdit,
+          onListTap: () {
+            _onMenuSelected('accounts/expense', 'Manage Expense');
+            setState(() {
+              _expenseToEdit = null;
+            });
+          },
+        );
+      }
+    } else if (_selectedLink == 'accounts/receivable') {
+      // If menu name contains "new" or "++NEW", show form directly
+      final showForm =
+          _selectedMenuName != null &&
+          (_selectedMenuName!.toLowerCase().contains('new') ||
+              _selectedMenuName!.contains('++NEW'));
+      return FinanceTablePage(title: 'Receivable', showFormInitially: showForm);
+    } else if (_selectedLink == 'accounts/supplier' ||
+        _selectedLink == 'supplier' ||
+        _selectedLink == 'suppliers' ||
+        _selectedLink == 'supplier/list' ||
+        _selectedLink?.contains('supplier') == true) {
+      return const SupplierPage();
+    } else if (_selectedLink == 'dealer' ||
+        _selectedLink == 'dealers' ||
+        _selectedLink == 'dealer/manage' ||
+        _selectedLink == 'dealer/list' ||
+        _selectedLink?.contains('dealer') == true) {
+      return const DealerPage();
     }
-    
+
     // Default to classic if nothing else matches but we have a selection
     if (_selectedLink != null) {
       return ClassicDashboard(
@@ -179,10 +324,8 @@ class _DashboardPageState extends State<DashboardPage> {
         onLinkSelected: _onMenuSelected,
       );
     }
-    
-    return const Center(
-      child: Text('Please select a module from the menu'),
-    );
+
+    return const Center(child: Text('Please select a module from the menu'));
   }
 
   Widget _buildUserArea() {
@@ -220,11 +363,11 @@ class _DashboardPageState extends State<DashboardPage> {
 
 class SidebarWidget extends StatefulWidget {
   final List<dynamic> menuData;
-  final Function(String?) onMenuSelected;
+  final Function(String?, [String?]) onMenuSelected;
   final String? selectedLink;
 
   const SidebarWidget({
-    super.key, 
+    super.key,
     required this.menuData,
     required this.onMenuSelected,
     this.selectedLink,
@@ -238,8 +381,18 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   DateTime _currentDate = DateTime.now();
 
   final List<String> _months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
 
   void _previousMonth() {
@@ -267,24 +420,38 @@ class _SidebarWidgetState extends State<SidebarWidget> {
       final children = item['children'] as List<dynamic>? ?? [];
       String? link = item['link'];
       String name = item['name'] ?? '';
-      
-      // Fallback links for Payable/Receivable
+
+      // Fallback links for Payable/Receivable/Supplier/Dealer/Income/Expense
       if (link == null || link == '#') {
-        if (name.toLowerCase().contains('payable')) {
+        final lowerName = name.toLowerCase();
+        debugPrint('Building menu item: name="$name", lowerName="$lowerName"');
+        if (lowerName.contains('income')) {
+          link = 'accounts/income';
+        } else if (lowerName.contains('expense') &&
+            lowerName.contains('manage')) {
+          link = 'accounts/expense/manage';
+        } else if (lowerName.contains('expense')) {
+          link = 'accounts/expense';
+        } else if (lowerName.contains('payable')) {
           link = 'accounts/payable';
-        } else if (name.toLowerCase().contains('receivable')) {
+        } else if (lowerName.contains('receivable')) {
           link = 'accounts/receivable';
         } else if (name.toLowerCase().contains('cashbook')) {
           link = 'accounts/cashbook';
+        } else if (lowerName.contains('supplier')) {
+          link = 'accounts/supplier';
+        } else if (lowerName.contains('dealer')) {
+          link = 'dealer';
         }
+        debugPrint('Assigned link: $link');
       }
 
       return MegaMenuItem(
         label: name,
         link: link,
         level: level,
-        active: widget.selectedLink == (link?.toLowerCase()),
-        onTap: () => widget.onMenuSelected(link),
+        active: widget.selectedLink == link,
+        onTap: () => widget.onMenuSelected(link, name),
         children: _buildMenuItems(children, level + 1),
       );
     }).toList();
@@ -305,7 +472,12 @@ class _SidebarWidgetState extends State<SidebarWidget> {
             child: _buildCalendar(),
           ),
           const SizedBox(height: 20),
-          const Center(child: Text('§', style: TextStyle(color: Color(0xFF777777), fontSize: 18))),
+          const Center(
+            child: Text(
+              '§',
+              style: TextStyle(color: Color(0xFF777777), fontSize: 18),
+            ),
+          ),
           const SizedBox(height: 20),
         ],
       ),
@@ -328,11 +500,19 @@ class _SidebarWidgetState extends State<SidebarWidget> {
             ),
             Text(
               '${_months[_currentDate.month - 1]} ${_currentDate.year}',
-              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             InkWell(
               onTap: _nextMonth,
-              child: const Icon(Icons.arrow_right, color: Colors.grey, size: 18),
+              child: const Icon(
+                Icons.arrow_right,
+                color: Colors.grey,
+                size: 18,
+              ),
             ),
           ],
         ),
@@ -342,11 +522,21 @@ class _SidebarWidgetState extends State<SidebarWidget> {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           children: [
-            ...['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => Center(child: Text(d, style: const TextStyle(color: Colors.grey, fontSize: 11)))),
+            ...['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(
+              (d) => Center(
+                child: Text(
+                  d,
+                  style: const TextStyle(color: Colors.grey, fontSize: 11),
+                ),
+              ),
+            ),
             ...List.generate(startWeekday, (index) => const SizedBox.shrink()),
             ...List.generate(days, (index) {
               int day = index + 1;
-              bool isToday = day == today.day && _currentDate.month == today.month && _currentDate.year == today.year;
+              bool isToday =
+                  day == today.day &&
+                  _currentDate.month == today.month &&
+                  _currentDate.year == today.year;
               return Center(
                 child: Container(
                   width: 24,
@@ -358,7 +548,10 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                   child: Center(
                     child: Text(
                       day.toString(),
-                      style: TextStyle(color: isToday ? Colors.white : Colors.grey, fontSize: 12),
+                      style: TextStyle(
+                        color: isToday ? Colors.white : Colors.grey,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ),
@@ -411,7 +604,7 @@ class _MegaMenuItemState extends State<MegaMenuItem> {
                 _isExpanded = !_isExpanded;
               });
             } else {
-              if (widget.label.toLowerCase().contains('employee list') || 
+              if (widget.label.toLowerCase().contains('employee list') ||
                   widget.link == 'hrm/employeeList') {
                 widget.onTap();
               } else {
@@ -427,10 +620,14 @@ class _MegaMenuItemState extends State<MegaMenuItem> {
               bottom: 10,
             ),
             decoration: BoxDecoration(
-              color: widget.active ? const Color(0xFF4A4A4A) : Colors.transparent,
+              color: widget.active
+                  ? const Color(0xFF4A4A4A)
+                  : Colors.transparent,
               border: Border(
                 left: BorderSide(
-                  color: (widget.active && widget.level == 0) ? Colors.red : Colors.transparent,
+                  color: (widget.active && widget.level == 0)
+                      ? Colors.red
+                      : Colors.transparent,
                   width: 3,
                 ),
               ),
@@ -444,16 +641,22 @@ class _MegaMenuItemState extends State<MegaMenuItem> {
                       Icon(
                         _getIconForLabel(widget.label),
                         size: 14,
-                        color: widget.level == 0 ? const Color(0xFF8BCFEA) : Colors.white70,
+                        color: widget.level == 0
+                            ? const Color(0xFF8BCFEA)
+                            : Colors.white70,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           widget.label,
                           style: TextStyle(
-                            color: widget.level == 0 ? const Color(0xFF8BCFEA) : Colors.white70,
+                            color: widget.level == 0
+                                ? const Color(0xFF8BCFEA)
+                                : Colors.white70,
                             fontSize: widget.level == 0 ? 13 : 12,
-                            fontWeight: widget.level == 0 ? FontWeight.w600 : FontWeight.normal,
+                            fontWeight: widget.level == 0
+                                ? FontWeight.w600
+                                : FontWeight.normal,
                           ),
                         ),
                       ),
@@ -464,20 +667,28 @@ class _MegaMenuItemState extends State<MegaMenuItem> {
                   children: [
                     if (widget.badge != null)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF555555),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
                           widget.badge.toString(),
-                          style: const TextStyle(color: Colors.white, fontSize: 11),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                          ),
                         ),
                       ),
                     if (hasChildren)
                       Icon(
                         _isExpanded ? Icons.arrow_drop_down : Icons.arrow_right,
-                        color: widget.level == 0 ? const Color(0xFF8BCFEA) : Colors.white70,
+                        color: widget.level == 0
+                            ? const Color(0xFF8BCFEA)
+                            : Colors.white70,
                         size: 14,
                       ),
                   ],
@@ -486,8 +697,7 @@ class _MegaMenuItemState extends State<MegaMenuItem> {
             ),
           ),
         ),
-        if (_isExpanded && hasChildren)
-          ...widget.children,
+        if (_isExpanded && hasChildren) ...widget.children,
       ],
     );
   }
@@ -524,7 +734,10 @@ class DashHeader extends StatelessWidget {
             children: const [
               Icon(Icons.home, size: 16, color: Colors.black87),
               SizedBox(width: 8),
-              Text('Dashboard', style: TextStyle(color: Color(0xFF333333), fontSize: 16)),
+              Text(
+                'Dashboard',
+                style: TextStyle(color: Color(0xFF333333), fontSize: 16),
+              ),
             ],
           ),
           Row(
@@ -542,15 +755,90 @@ class DashHeader extends StatelessWidget {
   }
 }
 
-class EmployeeDashboard extends StatelessWidget {
+class EmployeeDashboard extends StatefulWidget {
   final bool isSidebarOpen;
   final Function(String) onLinkSelected;
 
   const EmployeeDashboard({
-    super.key, 
+    super.key,
     required this.isSidebarOpen,
     required this.onLinkSelected,
   });
+
+  @override
+  State<EmployeeDashboard> createState() => _EmployeeDashboardState();
+}
+
+class _EmployeeDashboardState extends State<EmployeeDashboard> {
+  Map<String, dynamic>? _dashboardData;
+  bool _isLoading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDashboardData();
+  }
+
+  Future<void> _fetchDashboardData() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final orgId = await SessionManager.getOrgId();
+      final token = await SessionManager.getToken();
+
+      if (orgId == null) {
+        setState(() {
+          _error = 'Organization ID not found';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final url = Uri.parse(
+        'https://www.bs-org.com/index.php/api/AccountDashboard/getDashboard?orgID=$orgId',
+      );
+
+      final response = await http.get(
+        url,
+        headers: {if (token != null) 'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final body = response.body.trim();
+        if (body.startsWith('<!DOCTYPE') || body.startsWith('<html')) {
+          throw const FormatException('Server returned HTML instead of JSON');
+        }
+
+        final data = json.decode(body);
+
+        if (data['status'] == true) {
+          setState(() {
+            _dashboardData = Map<String, dynamic>.from(data);
+            _isLoading = false;
+          });
+        } else {
+          setState(() {
+            _error = data['message'] ?? 'Failed to load dashboard data';
+            _isLoading = false;
+          });
+        }
+      } else {
+        setState(() {
+          _error = 'Server error: ${response.statusCode}';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'Error: $e';
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -563,7 +851,34 @@ class EmployeeDashboard extends StatelessWidget {
           const SizedBox(height: 10),
           const Divider(),
           const SizedBox(height: 10),
-          _buildDashboardGrid(),
+          _isLoading
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(20.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      children: [
+                        Text(
+                          _error!,
+                          style: const TextStyle(color: Colors.red),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 10),
+                        ElevatedButton(
+                          onPressed: _fetchDashboardData,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : _buildDashboardGrid(),
           const SizedBox(height: 20),
           const Divider(),
           const SizedBox(height: 20),
@@ -574,26 +889,49 @@ class EmployeeDashboard extends StatelessWidget {
   }
 
   Widget _buildTopNavIcons() {
+    final attendance = _dashboardData?['attendance'] as Map<String, dynamic>?;
+    final present = attendance?['present']?.toString() ?? '0';
+    final leave = attendance?['leave']?.toString() ?? '0';
+    final absent = attendance?['absent']?.toString() ?? '0';
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _buildTopNavItem(Icons.qr_code, 'Attendance', '0', () => onLinkSelected('hrm/employeeAttendance')),
+        _buildTopNavItem(
+          Icons.qr_code,
+          'Attendance',
+          present,
+          () => widget.onLinkSelected('hrm/employeeAttendance'),
+        ),
         const SizedBox(width: 30),
-        _buildTopNavItem(Icons.qr_code, 'Leave', '0', () => onLinkSelected('hrm/leaveApplication')),
+        _buildTopNavItem(
+          Icons.qr_code,
+          'Leave',
+          leave,
+          () => widget.onLinkSelected('hrm/leaveApplication'),
+        ),
         const SizedBox(width: 30),
-        _buildTopNavItem(Icons.qr_code, 'Absent', '0', () {}),
+        _buildTopNavItem(Icons.qr_code, 'Absent', absent, () {}),
       ],
     );
   }
 
-  Widget _buildTopNavItem(IconData icon, String label, String value, VoidCallback onTap) {
+  Widget _buildTopNavItem(
+    IconData icon,
+    String label,
+    String value,
+    VoidCallback onTap,
+  ) {
     return InkWell(
       onTap: onTap,
       child: Column(
         children: [
           Icon(icon, size: 32, color: const Color(0xFF2E4560)),
           const SizedBox(height: 4),
-          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          ),
           Text(value, style: const TextStyle(fontSize: 12)),
         ],
       ),
@@ -601,26 +939,105 @@ class EmployeeDashboard extends StatelessWidget {
   }
 
   Widget _buildDashboardGrid() {
+    final payment = _dashboardData?['payment'] as Map<String, dynamic>?;
+    final receive = _dashboardData?['receive'] as Map<String, dynamic>?;
+
+    final paymentCount = payment?['total_count']?.toString() ?? '0';
+    final paymentAmtRaw = payment?['total_amount']?.toString() ?? '';
+    final receiveCount = receive?['total_count']?.toString() ?? '0';
+    final receiveAmtRaw = receive?['total_amount']?.toString() ?? '';
+
+    // Format amounts with commas
+    String formatAmount(String amountStr) {
+      if (amountStr.isEmpty) return '';
+      try {
+        final amount = double.parse(amountStr);
+        return NumberFormat('#,##0', 'en_US').format(amount);
+      } catch (e) {
+        return amountStr;
+      }
+    }
+
+    final formattedPaymentAmt = formatAmount(paymentAmtRaw);
+    final formattedReceiveAmt = formatAmount(receiveAmtRaw);
+
     final List<Map<String, dynamic>> items = [
-      {'title': 'Payment || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFe8f0fe), 'btn': 'btn-blue', 'btnText': '✔ New Voucher', 'link': 'accounts/payable'},
-      {'title': 'Receive || Year-2026', 'val': '8', 'amt': '৳ : 179855.00', 'color': const Color(0xFFd9f5df), 'btn': 'btn-green', 'btnText': '✔ New Voucher', 'link': 'accounts/receivable'},
-      {'title': 'Cashbook || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFfff9db), 'btn': 'btn-orange', 'btnText': '✔ View Cashbook', 'link': 'accounts/cashbook'},
-      {'title': 'Journal || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFf8d7da), 'btn': 'btn-red', 'btnText': '✔ New Voucher'},
-      {'title': 'Contra || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFd1ecf1), 'btn': 'btn-cyan', 'btnText': '✔ New Voucher'},
-      {'title': 'Approve MRR || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFffe5c3), 'btn': 'btn-orange', 'btnText': '✔ View Approval'},
-      {'title': 'Approve Chalan || Year-2026', 'val': '11', 'amt': '৳ : 325918.40', 'color': const Color(0xFFcfe9ea), 'btn': 'btn-cyan', 'btnText': '✔ View Approval'},
-      {'title': 'Purchase Return || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFddd6f7), 'btn': 'btn-purple', 'btnText': '✔ View Approval'},
-      {'title': 'Sales Return || Year-2026', 'val': '0', 'amt': '', 'color': const Color(0xFFf2d5f7), 'btn': 'btn-pink', 'btnText': '✔ View Approval'},
+      {
+        'title': 'Payment || Year-2026',
+        'val': paymentCount,
+        'amt': formattedPaymentAmt.isNotEmpty ? '৳ $formattedPaymentAmt' : '',
+        'color': const Color(0xFFe8f0fe),
+        'btn': 'btn-blue',
+        'btnText': '✔ New Voucher',
+        'link': 'accounts/payable',
+      },
+      {
+        'title': 'Receive || Year-2026',
+        'val': receiveCount,
+        'amt': formattedReceiveAmt.isNotEmpty ? '৳ $formattedReceiveAmt' : '',
+        'color': const Color(0xFFd9f5df),
+        'btn': 'btn-green',
+        'btnText': '✔ New Voucher',
+        'link': 'accounts/receivable',
+      },
+      {
+        'title': 'Journal || Year-2026',
+        'val': '0',
+        'amt': '',
+        'color': const Color(0xFFf8d7da),
+        'btn': 'btn-red',
+        'btnText': '✔ New Voucher',
+      },
+      {
+        'title': 'Contra || Year-2026',
+        'val': '0',
+        'amt': '',
+        'color': const Color(0xFFd1ecf1),
+        'btn': 'btn-cyan',
+        'btnText': '✔ New Voucher',
+      },
+      {
+        'title': 'Approve MRR || Year-2026',
+        'val': '0',
+        'amt': '',
+        'color': const Color(0xFFffe5c3),
+        'btn': 'btn-orange',
+        'btnText': '✔ View Approval',
+      },
+      {
+        'title': 'Approve Chalan || Year-2026',
+        'val': '11',
+        'amt': '৳ : 325918.40',
+        'color': const Color(0xFFcfe9ea),
+        'btn': 'btn-cyan',
+        'btnText': '✔ View Approval',
+      },
+      {
+        'title': 'Purchase Return || Year-2026',
+        'val': '0',
+        'amt': '',
+        'color': const Color(0xFFddd6f7),
+        'btn': 'btn-purple',
+        'btnText': '✔ View Approval',
+      },
+      {
+        'title': 'Sales Return || Year-2026',
+        'val': '0',
+        'amt': '',
+        'color': const Color(0xFFf2d5f7),
+        'btn': 'btn-pink',
+        'btnText': '✔ View Approval',
+      },
     ];
 
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: isSidebarOpen ? 1 : 2,
+        crossAxisCount: widget.isSidebarOpen ? 1 : 2,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: isSidebarOpen ? 1.5 : 1.3,
+        childAspectRatio: widget.isSidebarOpen ? 1.5 : 1.3,
       ),
       itemCount: items.length,
       itemBuilder: (context, index) {
@@ -628,7 +1045,7 @@ class EmployeeDashboard extends StatelessWidget {
         return InkWell(
           onTap: () {
             if (item['link'] != null) {
-              onLinkSelected(item['link']);
+              widget.onLinkSelected(item['link']);
             }
           },
           child: Container(
@@ -641,7 +1058,13 @@ class EmployeeDashboard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item['title'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                Text(
+                  item['title'],
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const Spacer(),
                 Row(
                   children: [
@@ -653,7 +1076,13 @@ class EmployeeDashboard extends StatelessWidget {
                         shape: BoxShape.circle,
                       ),
                       child: Center(
-                        child: Text(item['val'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        child: Text(
+                          item['val'],
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -661,9 +1090,9 @@ class EmployeeDashboard extends StatelessWidget {
                       child: Text(
                         item['amt'],
                         style: TextStyle(
-                          fontSize: 11, 
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: item['amt'].contains('179') || item['amt'].contains('325') ? Colors.green : Colors.black
+                          color: Colors.black,
                         ),
                       ),
                     ),
@@ -676,15 +1105,20 @@ class EmployeeDashboard extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: () {
                       if (item['link'] != null) {
-                        onLinkSelected(item['link']);
+                        widget.onLinkSelected(item['link']);
                       }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _getBtnColor(item['btn']),
                       padding: EdgeInsets.zero,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(3),
+                      ),
                     ),
-                    child: Text(item['btnText'], style: const TextStyle(color: Colors.white, fontSize: 10)),
+                    child: Text(
+                      item['btnText'],
+                      style: const TextStyle(color: Colors.white, fontSize: 10),
+                    ),
                   ),
                 ),
               ],
@@ -697,14 +1131,22 @@ class EmployeeDashboard extends StatelessWidget {
 
   Color _getBtnColor(String type) {
     switch (type) {
-      case 'btn-blue': return const Color(0xFF0d6efd);
-      case 'btn-green': return const Color(0xFF198754);
-      case 'btn-red': return const Color(0xFFdc3545);
-      case 'btn-cyan': return const Color(0xFF0dcaf0);
-      case 'btn-orange': return const Color(0xFFfd7e14);
-      case 'btn-purple': return const Color(0xFF5B32A4);
-      case 'btn-pink': return const Color(0xFFA820AD);
-      default: return Colors.grey;
+      case 'btn-blue':
+        return const Color(0xFF0d6efd);
+      case 'btn-green':
+        return const Color(0xFF198754);
+      case 'btn-red':
+        return const Color(0xFFdc3545);
+      case 'btn-cyan':
+        return const Color(0xFF0dcaf0);
+      case 'btn-orange':
+        return const Color(0xFFfd7e14);
+      case 'btn-purple':
+        return const Color(0xFF5B32A4);
+      case 'btn-pink':
+        return const Color(0xFFA820AD);
+      default:
+        return Colors.grey;
     }
   }
 
@@ -713,15 +1155,39 @@ class EmployeeDashboard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildReportCard('Top 5 Advance Reports', [
-          {'name': 'Transaction Statement Report', 'color': const Color(0xFFDDDDDD), 'link': 'open-green'},
-          {'name': 'Trial Balance', 'color': const Color(0xFFFFD8A8), 'link': 'open-red'},
-          {'name': 'Party Balance', 'color': const Color(0xFFC3F0CA), 'link': 'open-green'},
+          {
+            'name': 'Transaction Statement Report',
+            'color': const Color(0xFFDDDDDD),
+            'link': 'open-green',
+          },
+          {
+            'name': 'Trial Balance',
+            'color': const Color(0xFFFFD8A8),
+            'link': 'open-red',
+          },
+          {
+            'name': 'Party Balance',
+            'color': const Color(0xFFC3F0CA),
+            'link': 'open-green',
+          },
         ]),
         const SizedBox(height: 15),
         _buildReportCard('Top 5 Financial Reports', [
-          {'name': 'Comparative Financial Statements', 'color': const Color(0xFFDDDDDD), 'link': 'open-green'},
-          {'name': 'Comparative Income Statement', 'color': const Color(0xFFFFD8A8), 'link': 'open-red'},
-          {'name': 'Statement of Profit or Loss & Other Income', 'color': const Color(0xFFC3F0CA), 'link': 'open-green'},
+          {
+            'name': 'Comparative Financial Statements',
+            'color': const Color(0xFFDDDDDD),
+            'link': 'open-green',
+          },
+          {
+            'name': 'Comparative Income Statement',
+            'color': const Color(0xFFFFD8A8),
+            'link': 'open-red',
+          },
+          {
+            'name': 'Statement of Profit or Loss & Other Income',
+            'color': const Color(0xFFC3F0CA),
+            'link': 'open-green',
+          },
         ]),
       ],
     );
@@ -738,30 +1204,45 @@ class EmployeeDashboard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 8),
-          ...items.map((item) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(color: item['color'], shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 8),
-                Expanded(child: Text(item['name'], style: const TextStyle(fontSize: 11))),
-                Text(
-                  item['link'] == 'open-green' ? '⬆ Open' : '⬇ Open',
-                  style: TextStyle(
-                    fontSize: 11, 
-                    fontWeight: FontWeight.bold,
-                    color: item['link'] == 'open-green' ? Colors.green : Colors.red
+          ...items.map(
+            (item) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: item['color'],
+                      shape: BoxShape.circle,
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      item['name'],
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+                  Text(
+                    item['link'] == 'open-green' ? '⬆ Open' : '⬇ Open',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: item['link'] == 'open-green'
+                          ? Colors.green
+                          : Colors.red,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          )),
+          ),
         ],
       ),
     );
@@ -773,7 +1254,7 @@ class ClassicDashboard extends StatelessWidget {
   final Function(String) onLinkSelected;
 
   const ClassicDashboard({
-    super.key, 
+    super.key,
     required this.isSidebarOpen,
     required this.onLinkSelected,
   });
@@ -786,7 +1267,10 @@ class ClassicDashboard extends StatelessWidget {
         children: [
           _buildStatCards(),
           const SizedBox(height: 20),
-          const Text('⬤ ⬤ ⬤', style: TextStyle(color: Colors.grey, fontSize: 18)),
+          const Text(
+            '⬤ ⬤ ⬤',
+            style: TextStyle(color: Colors.grey, fontSize: 18),
+          ),
           const SizedBox(height: 20),
           _buildTablesRow(),
         ],
@@ -941,13 +1425,23 @@ class TableCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             color: const Color(0xFFFAFAFA),
-            child: Text(title, style: const TextStyle(color: Color(0xFF333333), fontSize: 14, fontWeight: FontWeight.w600)),
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: Color(0xFF333333),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
           const Divider(height: 1),
           Container(
             padding: const EdgeInsets.all(20),
             alignment: Alignment.center,
-            child: const Text('No data available', style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 12)),
+            child: const Text(
+              'No data available',
+              style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 12),
+            ),
           ),
         ],
       ),
@@ -956,7 +1450,9 @@ class TableCard extends StatelessWidget {
 }
 
 class AttendanceScreen extends StatefulWidget {
-  const AttendanceScreen({super.key});
+  final Map<String, dynamic> userData;
+
+  const AttendanceScreen({super.key, required this.userData});
 
   @override
   State<AttendanceScreen> createState() => _AttendanceScreenState();
@@ -969,6 +1465,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   DateTime? _checkInDateTime;
   bool _isCheckedIn = false;
   bool _isCheckedOut = false;
+  bool _isLoading = false;
   late Timer _timer;
   DateTime _currentTime = DateTime.now();
 
@@ -980,6 +1477,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         _currentTime = DateTime.now();
       });
     });
+    _loadTodayStatus();
   }
 
   @override
@@ -988,36 +1486,115 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     super.dispose();
   }
 
-  Future<void> _takeCheckInPicture() async {
-    final ImagePicker picker = ImagePicker();
+  Future<void> _loadTodayStatus() async {
+    final orgId = await SessionManager.getOrgId();
+
+    if (orgId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Session expired. Please login again.')),
+      );
+      return;
+    }
+
+    var employeeId = widget.userData['employee_id'];
+    if (employeeId == null || employeeId.toString().isEmpty) {
+      // Fallback to user id if employee_id is not provided in userData
+      employeeId = widget.userData['id'];
+    }
+
+    if (employeeId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Employee ID not found.')));
+      return;
+    }
+
     try {
-      final XFile? photo = await picker.pickImage(
-        source: ImageSource.camera,
-        preferredCameraDevice: CameraDevice.front,
+      final token = await SessionManager.getToken();
+
+      final response = await http.get(
+        Uri.parse(
+          'https://www.bs-org.com/index.php/api/Attendance/todayStatus?employee_id=$employeeId&orgID=$orgId',
+        ),
+        headers: {if (token != null) 'Authorization': 'Bearer $token'},
       );
 
-      if (photo != null) {
-        final now = DateTime.now();
-        setState(() {
-          _checkInDateTime = now;
-          _checkInTime = DateFormat('hh:mm a').format(now);
-          _isCheckedIn = true;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Check-in successful!')),
-        );
+      if (response.statusCode == 200) {
+        final body = response.body.trim();
+        if (body.startsWith('<!DOCTYPE') || body.startsWith('<html')) {
+          throw const FormatException('Server returned HTML instead of JSON');
+        }
+
+        final data = json.decode(body);
+        if (data['status'] == true) {
+          setState(() {
+            _isCheckedIn = data['checked_in'] ?? false;
+            _isCheckedOut = data['checked_out'] ?? false;
+
+            if (data['data'] != null) {
+              final attendanceData = data['data'];
+              if (attendanceData['time_in'] != null &&
+                  attendanceData['time_in'] != '') {
+                _checkInTime = _formatTime(attendanceData['time_in']);
+                final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+                try {
+                  _checkInDateTime = DateTime.parse(
+                    '$today ${attendanceData['time_in']}',
+                  );
+                } catch (e) {
+                  debugPrint('Error parsing check-in time: $e');
+                }
+              }
+              if (attendanceData['time_out'] != null &&
+                  attendanceData['time_out'] != '') {
+                _checkOutTime = _formatTime(attendanceData['time_out']);
+                if (_checkInDateTime != null) {
+                  final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+                  try {
+                    final checkOutDateTime = DateTime.parse(
+                      '$today ${attendanceData['time_out']}',
+                    );
+                    final duration = checkOutDateTime.difference(
+                      _checkInDateTime!,
+                    );
+                    final hours = duration.inHours.toString().padLeft(2, '0');
+                    final minutes = (duration.inMinutes % 60)
+                        .toString()
+                        .padLeft(2, '0');
+                    _workingHours = '$hours:$minutes';
+                  } catch (e) {
+                    debugPrint('Error parsing check-out time: $e');
+                  }
+                }
+              }
+            }
+          });
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error taking picture: $e')),
-      );
+      debugPrint('Error loading attendance status: $e');
     }
   }
 
-  Future<void> _takeCheckOutPicture() async {
-    if (!_isCheckedIn) {
+  String _formatTime(String timeString) {
+    try {
+      if (timeString.isEmpty) return '--:--';
+      // Handle cases where time might be HH:mm:ss
+      final parts = timeString.split(':');
+      if (parts.length >= 2) {
+        final time = DateFormat('HH:mm').parse('${parts[0]}:${parts[1]}');
+        return DateFormat('hh:mm a').format(time);
+      }
+      return timeString;
+    } catch (e) {
+      return timeString;
+    }
+  }
+
+  Future<void> _takeCheckInPicture() async {
+    if (_isCheckedIn) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please check in first!')),
+        const SnackBar(content: Text('Already checked in today!')),
       );
       return;
     }
@@ -1027,47 +1604,248 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       final XFile? photo = await picker.pickImage(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.front,
+        imageQuality: 50, // Reduce quality to save bandwidth
       );
 
       if (photo != null) {
-        final now = DateTime.now();
-        final duration = now.difference(_checkInDateTime!);
-        final hours = duration.inHours.toString().padLeft(2, '0');
-        final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
-
         setState(() {
-          _checkOutTime = DateFormat('hh:mm a').format(now);
-          _workingHours = '$hours:$minutes';
-          _isCheckedOut = true;
+          _isLoading = true;
         });
+
+        await _saveAttendance('checkin', photo);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error taking picture: $e')));
+    }
+  }
+
+  Future<void> _takeCheckOutPicture() async {
+    if (!_isCheckedIn) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please check in first!')));
+      return;
+    }
+
+    if (_isCheckedOut) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Already checked out today!')),
+      );
+      return;
+    }
+
+    final ImagePicker picker = ImagePicker();
+    try {
+      final XFile? photo = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.front,
+        imageQuality: 50,
+      );
+
+      if (photo != null) {
+        setState(() {
+          _isLoading = true;
+        });
+
+        await _saveAttendance('checkout', photo);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error taking picture: $e')));
+    }
+  }
+
+  Future<void> _saveAttendance(String type, XFile photo) async {
+    final orgId = await SessionManager.getOrgId();
+
+    if (orgId == null) {
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Session expired. Please login again.')),
+      );
+      return;
+    }
+
+    var employeeId = widget.userData['employee_id'];
+    if (employeeId == null || employeeId.toString().isEmpty) {
+      employeeId = widget.userData['id'];
+    }
+
+    final userId = widget.userData['id'];
+
+    if (employeeId == null || userId == null) {
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Required user data not found.')),
+      );
+      return;
+    }
+
+    try {
+      final token = await SessionManager.getToken();
+      final uri = Uri.parse(
+        'https://www.bs-org.com/index.php/api/Attendance/saveAttendance',
+      );
+      final request = http.MultipartRequest('POST', uri);
+
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+
+      // Add fields as expected by CI_Controller in attendance.txt
+      request.fields['employee_id'] = employeeId.toString();
+      request.fields['shift_id'] = '1';
+      request.fields['orgID'] = orgId.toString();
+      request.fields['user_id'] = userId.toString();
+      request.fields['type'] = type;
+
+      // Add image file
+      final bytes = await photo.readAsBytes();
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'image',
+          bytes,
+          filename:
+              'attendance_${type}_${employeeId}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        ),
+      );
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      setState(() {
+        _isLoading = false;
+      });
+
+      final body = response.body.trim();
+      if (body.startsWith('<!DOCTYPE') || body.startsWith('<html')) {
+        debugPrint('HTML Response: ${body.substring(0, 200)}');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Check-out successful!')),
+          const SnackBar(
+            content: Text('Server error: Received HTML instead of JSON'),
+          ),
+        );
+        return;
+      }
+
+      final data = json.decode(body);
+
+      if (data['status'] == true) {
+        final now = DateTime.now();
+
+        if (type == 'checkin') {
+          setState(() {
+            _checkInDateTime = now;
+            _checkInTime = DateFormat('hh:mm a').format(now);
+            _isCheckedIn = true;
+          });
+        } else if (type == 'checkout') {
+          setState(() {
+            _checkOutTime = DateFormat('hh:mm a').format(now);
+            _isCheckedOut = true;
+            if (_checkInDateTime != null) {
+              final duration = now.difference(_checkInDateTime!);
+              final hours = duration.inHours.toString().padLeft(2, '0');
+              final minutes = (duration.inMinutes % 60).toString().padLeft(
+                2,
+                '0',
+              );
+              _workingHours = '$hours:$minutes';
+            }
+          });
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              data['message'] ?? '${type.toUpperCase()} successful!',
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(data['message'] ?? 'Failed to save attendance'),
+          ),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error taking picture: $e')),
-      );
+      setState(() {
+        _isLoading = false;
+      });
+      debugPrint('Error saving attendance: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildTodayStatusCard(),
-          const SizedBox(height: 20),
-          const Text(
-            'Attendance History',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
+    return Stack(
+      children: [
+        SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildTodayStatusCard(),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Attendance History',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF333333),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              AttendanceDetailsPage(userData: widget.userData),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.list, size: 16),
+                    label: const Text('View Full Details'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2E4560),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _buildAttendanceList(),
+            ],
           ),
-          const SizedBox(height: 10),
-          _buildAttendanceList(),
-        ],
-      ),
+        ),
+        if (_isLoading)
+          Container(
+            color: Colors.black.withOpacity(0.3),
+            child: const Center(child: CircularProgressIndicator()),
+          ),
+      ],
     );
   }
 
@@ -1086,7 +1864,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             const SizedBox(height: 10),
             Text(
               DateFormat('hh:mm:ss a').format(_currentTime),
-              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF2E4560)),
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2E4560),
+              ),
             ),
             const Text('Current Time'),
             const SizedBox(height: 20),
@@ -1103,7 +1885,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   Icons.logout,
                   'Check Out',
                   Colors.orange,
-                  (!_isCheckedIn || _isCheckedOut) ? null : _takeCheckOutPicture,
+                  (!_isCheckedIn || _isCheckedOut)
+                      ? null
+                      : _takeCheckOutPicture,
                 ),
               ],
             ),
@@ -1124,24 +1908,39 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
-  Widget _buildActionButton(IconData icon, String label, Color color, VoidCallback? onPressed) {
+  Widget _buildActionButton(
+    IconData icon,
+    String label,
+    Color color,
+    VoidCallback? onPressed,
+  ) {
+    final isDisabled = onPressed == null || _isLoading;
     return Column(
       children: [
         ElevatedButton(
-          onPressed: onPressed,
+          onPressed: isDisabled ? null : onPressed,
           style: ElevatedButton.styleFrom(
-            backgroundColor: onPressed == null ? Colors.grey : color,
+            backgroundColor: isDisabled ? Colors.grey : color,
             shape: const CircleBorder(),
             padding: const EdgeInsets.all(16),
           ),
-          child: Icon(icon, color: Colors.white, size: 28),
+          child: _isLoading && onPressed != null
+              ? const SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : Icon(icon, color: Colors.white, size: 28),
         ),
         const SizedBox(height: 8),
         Text(
           label,
           style: TextStyle(
             fontWeight: FontWeight.w500,
-            color: onPressed == null ? Colors.grey : Colors.black,
+            color: isDisabled ? Colors.grey : Colors.black,
           ),
         ),
       ],
@@ -1153,15 +1952,28 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       children: [
         Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
         const SizedBox(height: 4),
-        Text(time, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(
+          time,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
       ],
     );
   }
 
   Widget _buildAttendanceList() {
     final history = [
-      {'date': 'Mar 01', 'in': '09:05 AM', 'out': '06:10 PM', 'status': 'Present'},
-      {'date': 'Feb 28', 'in': '08:55 AM', 'out': '06:05 PM', 'status': 'Present'},
+      {
+        'date': 'Mar 01',
+        'in': '09:05 AM',
+        'out': '06:10 PM',
+        'status': 'Present',
+      },
+      {
+        'date': 'Feb 28',
+        'in': '08:55 AM',
+        'out': '06:05 PM',
+        'status': 'Present',
+      },
       {'date': 'Feb 27', 'in': '09:15 AM', 'out': '06:20 PM', 'status': 'Late'},
       {'date': 'Feb 26', 'in': '--:--', 'out': '--:--', 'status': 'Absent'},
     ];
@@ -1175,7 +1987,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         final item = history[index];
         return ListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text(item['date']!, style: const TextStyle(fontWeight: FontWeight.bold)),
+          title: Text(
+            item['date']!,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
           subtitle: Text('In: ${item['in']} | Out: ${item['out']}'),
           trailing: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -1185,7 +2000,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ),
             child: Text(
               item['status']!,
-              style: TextStyle(color: _getStatusColor(item['status']!), fontWeight: FontWeight.bold, fontSize: 12),
+              style: TextStyle(
+                color: _getStatusColor(item['status']!),
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
             ),
           ),
         );
@@ -1195,10 +2014,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   Color _getStatusColor(String status) {
     switch (status) {
-      case 'Present': return Colors.green;
-      case 'Late': return Colors.orange;
-      case 'Absent': return Colors.red;
-      default: return Colors.grey;
+      case 'Present':
+        return Colors.green;
+      case 'Late':
+        return Colors.orange;
+      case 'Absent':
+        return Colors.red;
+      default:
+        return Colors.grey;
     }
   }
 }
@@ -1217,7 +2040,13 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
   DateTime? _endDate;
   String? _selectedLeaveType;
 
-  final List<String> _leaveTypes = ['Sick Leave', 'Casual Leave', 'Earned Leave', 'Maternity Leave', 'Paternity Leave'];
+  final List<String> _leaveTypes = [
+    'Sick Leave',
+    'Casual Leave',
+    'Earned Leave',
+    'Maternity Leave',
+    'Paternity Leave',
+  ];
 
   Future<void> _selectDate(BuildContext context, bool isStartDate) async {
     final DateTime? picked = await showDatePicker(
@@ -1248,12 +2077,14 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
         );
         return;
       }
-      
+
       // Simulate submission
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Leave application submitted successfully!')),
+        const SnackBar(
+          content: Text('Leave application submitted successfully!'),
+        ),
       );
-      
+
       setState(() {
         _selectedLeaveType = null;
         _startDate = null;
@@ -1265,112 +2096,164 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Apply for Leave',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
-          ),
-          const SizedBox(height: 20),
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    DropdownButtonFormField<String>(
-                      value: _selectedLeaveType,
-                      decoration: const InputDecoration(
-                        labelText: 'Leave Type *',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 15),
-                      ),
-                      items: _leaveTypes.map((type) => DropdownMenuItem(value: type, child: Text(type))).toList(),
-                      onChanged: (val) => setState(() => _selectedLeaveType = val),
-                      validator: (val) => val == null ? 'Please select a leave type' : null,
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () => _selectDate(context, true),
-                            child: InputDecorator(
-                              decoration: const InputDecoration(
-                                labelText: 'Start Date *',
-                                border: OutlineInputBorder(),
-                                suffixIcon: Icon(Icons.calendar_today, size: 18),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Leave Application'),
+        backgroundColor: const Color(0xFF2E4560),
+        foregroundColor: Colors.white,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 0),
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      DropdownButtonFormField<String>(
+                        value: _selectedLeaveType,
+                        decoration: const InputDecoration(
+                          labelText: 'Leave Type *',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 15,
+                          ),
+                        ),
+                        items: _leaveTypes
+                            .map(
+                              (type) => DropdownMenuItem(
+                                value: type,
+                                child: Text(type),
                               ),
-                              child: Text(
-                                _startDate == null ? 'Select' : DateFormat('yyyy-MM-dd').format(_startDate!),
-                                style: TextStyle(color: _startDate == null ? Colors.grey : Colors.black, fontSize: 13),
+                            )
+                            .toList(),
+                        onChanged: (val) =>
+                            setState(() => _selectedLeaveType = val),
+                        validator: (val) =>
+                            val == null ? 'Please select a leave type' : null,
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => _selectDate(context, true),
+                              child: InputDecorator(
+                                decoration: const InputDecoration(
+                                  labelText: 'Start Date *',
+                                  border: OutlineInputBorder(),
+                                  suffixIcon: Icon(
+                                    Icons.calendar_today,
+                                    size: 18,
+                                  ),
+                                ),
+                                child: Text(
+                                  _startDate == null
+                                      ? 'Select'
+                                      : DateFormat(
+                                          'yyyy-MM-dd',
+                                        ).format(_startDate!),
+                                  style: TextStyle(
+                                    color: _startDate == null
+                                        ? Colors.grey
+                                        : Colors.black,
+                                    fontSize: 13,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 15),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () => _selectDate(context, false),
-                            child: InputDecorator(
-                              decoration: const InputDecoration(
-                                labelText: 'End Date *',
-                                border: OutlineInputBorder(),
-                                suffixIcon: Icon(Icons.calendar_today, size: 18),
-                              ),
-                              child: Text(
-                                _endDate == null ? 'Select' : DateFormat('yyyy-MM-dd').format(_endDate!),
-                                style: TextStyle(color: _endDate == null ? Colors.grey : Colors.black, fontSize: 13),
+                          const SizedBox(width: 15),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => _selectDate(context, false),
+                              child: InputDecorator(
+                                decoration: const InputDecoration(
+                                  labelText: 'End Date *',
+                                  border: OutlineInputBorder(),
+                                  suffixIcon: Icon(
+                                    Icons.calendar_today,
+                                    size: 18,
+                                  ),
+                                ),
+                                child: Text(
+                                  _endDate == null
+                                      ? 'Select'
+                                      : DateFormat(
+                                          'yyyy-MM-dd',
+                                        ).format(_endDate!),
+                                  style: TextStyle(
+                                    color: _endDate == null
+                                        ? Colors.grey
+                                        : Colors.black,
+                                    fontSize: 13,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    TextFormField(
-                      controller: _reasonController,
-                      maxLines: 4,
-                      decoration: const InputDecoration(
-                        labelText: 'Reason for Leave *',
-                        border: OutlineInputBorder(),
-                        alignLabelWithHint: true,
+                        ],
                       ),
-                      validator: (val) => (val == null || val.trim().isEmpty) ? 'Please provide a reason' : null,
-                    ),
-                    const SizedBox(height: 30),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: _submitApplication,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2E4560),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      const SizedBox(height: 20),
+                      TextFormField(
+                        controller: _reasonController,
+                        maxLines: 4,
+                        decoration: const InputDecoration(
+                          labelText: 'Reason for Leave *',
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
                         ),
-                        child: const Text('Submit Application', style: TextStyle(color: Colors.white, fontSize: 16)),
+                        validator: (val) => (val == null || val.trim().isEmpty)
+                            ? 'Please provide a reason'
+                            : null,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 30),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: _submitApplication,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2E4560),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text(
+                            'Submit Application',
+                            style: TextStyle(color: Colors.white, fontSize: 16),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 30),
-          const Text(
-            'Recent Leave Status',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
-          ),
-          const SizedBox(height: 15),
-          _buildLeaveStatusList(),
-        ],
+            const SizedBox(height: 30),
+            const Text(
+              'Recent Leave Status',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF333333),
+              ),
+            ),
+            const SizedBox(height: 15),
+            _buildLeaveStatusList(),
+          ],
+        ),
       ),
     );
   }
@@ -1383,34 +2266,58 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
     ];
 
     return Column(
-      children: history.map((item) => Card(
-        margin: const EdgeInsets.only(bottom: 10),
-        child: ListTile(
-          title: Text(item['type']!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          subtitle: Text(item['date']!, style: const TextStyle(fontSize: 12)),
-          trailing: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: _getStatusColor(item['status']!).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: _getStatusColor(item['status']!)),
+      children: history
+          .map(
+            (item) => Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              child: ListTile(
+                title: Text(
+                  item['type']!,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                subtitle: Text(
+                  item['date']!,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _getStatusColor(item['status']!).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: _getStatusColor(item['status']!)),
+                  ),
+                  child: Text(
+                    item['status']!,
+                    style: TextStyle(
+                      color: _getStatusColor(item['status']!),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ),
             ),
-            child: Text(
-              item['status']!,
-              style: TextStyle(color: _getStatusColor(item['status']!), fontWeight: FontWeight.bold, fontSize: 11),
-            ),
-          ),
-        ),
-      )).toList(),
+          )
+          .toList(),
     );
   }
 
   Color _getStatusColor(String status) {
     switch (status) {
-      case 'Approved': return Colors.green;
-      case 'Pending': return Colors.orange;
-      case 'Rejected': return Colors.red;
-      default: return Colors.grey;
+      case 'Approved':
+        return Colors.green;
+      case 'Pending':
+        return Colors.orange;
+      case 'Rejected':
+        return Colors.red;
+      default:
+        return Colors.grey;
     }
   }
 }

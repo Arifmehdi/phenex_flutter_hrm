@@ -1,0 +1,298 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+class Dealer extends CI_Controller {
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->load->database();
+        header("Content-Type: application/json");
+    }
+
+    /**
+     * ✅ LIST ALL DEALERS BY orgID
+     * GET: /api/Dealer/list?orgID=98
+     */
+    public function list()
+    {
+        $org = $this->input->get('orgID');
+
+        if(!$org){
+            echo json_encode([
+                "status" => false,
+                "message" => "orgID is required"
+            ]);
+            return;
+        }
+
+        $dealers = $this->db->query("
+            SELECT
+                d.id,
+                d.dealer_name,
+                d.dealer_code,
+                dc.contact_person,
+                dc.contact_no,
+                IFNULL(sp.do_amt, 0) AS do_amt,
+                IFNULL(df.opening_cr, 0) AS opening_cr,
+                IFNULL(df.opening_dr, 0) AS opening_dr
+            FROM jeal_dealer d
+            LEFT JOIN jeal_dealer_contact dc ON dc.dealer_id = d.id
+            LEFT JOIN (
+                SELECT dealer_id, SUM(due_amount) AS do_amt
+                FROM jeal_do_schedule_plan
+                GROUP BY dealer_id
+            ) sp ON sp.dealer_id = d.id
+            LEFT JOIN jeal_dealer_finance df ON df.dealer_id = d.id
+            WHERE d.orgID = ?
+        ", [$org])->result();
+
+        echo json_encode([
+            "status" => true,
+            "data" => $dealers
+        ]);
+    }
+
+    /**
+     * ✅ GET SINGLE DEALER
+     * GET: /api/Dealer/details?id=1
+     */
+    public function details()
+    {
+        $id = $this->input->get('id');
+
+        if(!$id){
+            echo json_encode([
+                "status" => false,
+                "message" => "Dealer ID required"
+            ]);
+            return;
+        }
+
+        $dealer = $this->db->get_where('jeal_dealer', ['id' => $id])->row();
+
+        echo json_encode([
+            "status" => true,
+            "data" => $dealer
+        ]);
+    }
+
+    /**
+     * ✅ CREATE DEALER
+     * POST: /api/Dealer/create
+     */
+     public function create()
+{
+    $data = json_decode(file_get_contents("php://input"), true);
+
+    if(empty($data['dealer_name']) || empty($data['orgID'])){
+        echo json_encode([
+            "status" => false,
+            "message" => "dealer_name & orgID required"
+        ]);
+        return;
+    }
+
+    $this->db->trans_start(); // ✅ transaction start
+
+    // ✅ 1. Dealer Insert
+    $dealerData = [
+        'company_id'   => $data['company_id'] ?? null,
+        'zone_id'      => $data['zone_id'] ?? null,
+        'dsm_id'       => $data['dsm_id'] ?? null,
+        'asm_id'       => $data['asm_id'] ?? null,
+        'area_id'      => $data['area_id'] ?? null,
+        'district_id'  => $data['district_id'] ?? null,
+        'dealer_name'  => $data['dealer_name'],
+        'dealer_code'  => $data['dealer_code'] ?? '',
+        'dealer_type'  => $data['dealer_type'] ?? null,
+        'create_date'  => date('Y-m-d'),
+        'create_by'    => $data['user_id'] ?? 1,
+        'orgID'        => $data['orgID']
+    ];
+
+    $this->db->insert('jeal_dealer', $dealerData);
+    $dealer_id = $this->db->insert_id();
+
+    // ✅ 2. Contact Insert
+    if(!empty($data['contact_no']) || !empty($data['contact_person'])){
+        $contactData = [
+            'dealer_id'       => $dealer_id,
+            'dealer_type'     => $data['dealer_type'] ?? null,
+            'contact_person'  => $data['contact_person'] ?? '',
+            'contact_no'      => $data['contact_no'] ?? '',
+            'email'           => $data['email'] ?? '',
+            'address'         => $data['address'] ?? '',
+            'create_date'     => date('Y-m-d H:i:s'),
+            'create_by'       => $data['user_id'] ?? 1,
+        ];
+        $this->db->insert('jeal_dealer_contact', $contactData);
+    }
+
+    // ✅ 3. Finance Insert (IMPORTANT FIX)
+    if(isset($data['opening_dr']) || isset($data['opening_cr'])){
+        $financeData = [
+            'dealer_id'   => $dealer_id,
+            'opening_dr'  => $data['opening_dr'] ?? 0,
+            'opening_cr'  => $data['opening_cr'] ?? 0,
+            'create_date' => date('Y-m-d H:i:s'),
+            'create_by'   => $data['user_id'] ?? 1,
+        ];
+        $this->db->insert('jeal_dealer_finance', $financeData);
+    }
+
+    $this->db->trans_complete(); // ✅ transaction end
+
+    if ($this->db->trans_status() === FALSE) {
+        echo json_encode([
+            "status" => false,
+            "message" => "Insert failed"
+        ]);
+    } else {
+        echo json_encode([
+            "status" => true,
+            "message" => "Dealer created successfully",
+            "dealer_id" => $dealer_id
+        ]);
+    }
+}
+
+    /**
+     * ✅ UPDATE DEALER
+     * POST: /api/Dealer/update?id=1
+     */
+    public function update()
+    {
+        $id = $this->input->get('id');
+        $data = json_decode(file_get_contents("php://input"), true);
+
+        if(!$id){
+            echo json_encode([
+                "status" => false,
+                "message" => "Dealer ID required"
+            ]);
+            return;
+        }
+
+        $this->db->trans_start(); // ✅ transaction start
+
+        // ✅ 1. Dealer Update
+        $dealerData = [
+            'dealer_name' => $data['dealer_name'],
+            'dealer_code' => $data['dealer_code'] ?? '',
+        ];
+
+        $this->db->where('id', $id);
+        $this->db->update('jeal_dealer', $dealerData);
+
+        // ✅ 2. Contact Update
+        if(isset($data['contact_no'])){
+            $this->db->where('dealer_id', $id);
+            $this->db->update('jeal_dealer_contact', [
+                'contact_no' => $data['contact_no'],
+                'contact_person' => $data['contact_person'] ?? '',
+                'contact_type' => $data['dealer_type'] ?? null,
+                'email' => $data['email'] ?? '',
+                'address' => $data['address'] ?? '',
+                'update_date' => date('Y-m-d H:i:s'),
+                'update_by' => $data['user_id'] ?? 1,
+            ]);
+        } else {
+            // Ensure contact record exists if contact data is being sent
+            if(!empty($data['contact_person']) || !empty($data['email']) || !empty($data['address'])){
+                $this->db->where('dealer_id', $id);
+                $existingContact = $this->db->get('jeal_dealer_contact')->row();
+                if($existingContact){
+                    $this->db->where('dealer_id', $id);
+                    $this->db->update('jeal_dealer_contact', [
+                        'contact_person' => $data['contact_person'] ?? '',
+                        'email' => $data['email'] ?? '',
+                        'address' => $data['address'] ?? '',
+                        'update_date' => date('Y-m-d H:i:s'),
+                        'update_by' => $data['user_id'] ?? 1,
+                    ]);
+                } else {
+                    $contactData = [
+                        'dealer_id' => $id,
+                        'contact_person' => $data['contact_person'] ?? '',
+                        'contact_no' => $data['contact_no'] ?? '',
+                        'email' => $data['email'] ?? '',
+                        'address' => $data['address'] ?? '',
+                        'create_date' => date('Y-m-d H:i:s'),
+                        'create_by' => $data['user_id'] ?? 1,
+                    ];
+                    $this->db->insert('jeal_dealer_contact', $contactData);
+                }
+            }
+        }
+
+        // ✅ 3. Finance Update (IMPORTANT FIX)
+        if(isset($data['opening_dr']) || isset($data['opening_cr'])){
+            // Check if finance record exists
+            $this->db->where('dealer_id', $id);
+            $existingFinance = $this->db->get('jeal_dealer_finance')->row();
+
+            $financeData = [
+                'opening_dr' => $data['opening_dr'] ?? 0,
+                'opening_cr' => $data['opening_cr'] ?? 0,
+                'update_date' => date('Y-m-d H:i:s'),
+                'update_by' => $data['user_id'] ?? 1,
+            ];
+
+            if($existingFinance){
+                // Update existing finance record
+                $this->db->where('dealer_id', $id);
+                $this->db->update('jeal_dealer_finance', $financeData);
+            } else {
+                // Insert new finance record
+                $financeData['dealer_id'] = $id;
+                $financeData['create_date'] = date('Y-m-d H:i:s');
+                $financeData['create_by'] = $data['user_id'] ?? 1;
+                $this->db->insert('jeal_dealer_finance', $financeData);
+            }
+        }
+
+        $this->db->trans_complete(); // ✅ transaction end
+
+        if ($this->db->trans_status() === FALSE) {
+            echo json_encode([
+                "status" => false,
+                "message" => "Update failed"
+            ]);
+        } else {
+            echo json_encode([
+                "status" => true,
+                "message" => "Dealer updated successfully"
+            ]);
+        }
+    }
+
+    /**
+     * ✅ DELETE DEALER
+     * DELETE: /api/Dealer/delete?id=1
+     */
+    public function delete()
+    {
+        $id = $this->input->get('id');
+
+        if(!$id){
+            echo json_encode([
+                "status" => false,
+                "message" => "Dealer ID required"
+            ]);
+            return;
+        }
+
+        $this->db->where('id', $id);
+        $this->db->delete('jeal_dealer');
+
+        // also delete related data
+        $this->db->where('dealer_id', $id);
+        $this->db->delete('jeal_dealer_contact');
+
+        echo json_encode([
+            "status" => true,
+            "message" => "Dealer deleted successfully"
+        ]);
+    }
+}

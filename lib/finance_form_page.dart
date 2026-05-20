@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:dropdown_search/dropdown_search.dart';
 
 class FinanceFormPage extends StatefulWidget {
   final String title;
@@ -188,29 +189,117 @@ class _FinanceFormPageState extends State<FinanceFormPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF566D7E),
-        borderRadius: BorderRadius.circular(3),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF6A5AE0), Color(0xFF7C73E6)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _selectedHead,
-          hint: const Text('( Select One )', style: TextStyle(color: Colors.white70, fontSize: 13)),
-          dropdownColor: const Color(0xFF566D7E),
-          icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-          isExpanded: true,
-          style: const TextStyle(color: Colors.white, fontSize: 13),
-          items: _heads.map((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(value),
+      child: DropdownSearch<String>(
+        selectedItem: _selectedHead,
+        items: _heads,
+        itemAsString: (item) => item,
+        onChanged: (newValue) {
+          setState(() {
+            _selectedHead = newValue;
+          });
+        },
+        dropdownDecoratorProps: const DropDownDecoratorProps(
+          dropdownSearchDecoration: InputDecoration(
+            hintText: '( Select One )',
+            hintStyle: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500),
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+          ),
+        ),
+        popupProps: PopupProps.menu(
+          showSearchBox: true,
+          searchFieldProps: TextFieldProps(
+            decoration: InputDecoration(
+              hintText: 'Search heads...',
+              prefixIcon: const Icon(Icons.search, size: 20, color: Color(0xFF6A5AE0)),
+              suffixIcon: const Icon(Icons.clear, size: 18, color: Colors.grey),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              border: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+                borderSide: BorderSide(width: 0),
+              ),
+              enabledBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+                borderSide: BorderSide(width: 0),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+                borderSide: BorderSide(color: Color(0xFF6A5AE0), width: 2),
+              ),
+            ),
+          ),
+          constraints: const BoxConstraints(maxHeight: 300),
+          itemBuilder: (context, item, isSelected) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFFF0F0FF) : null,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSelected ? const Color(0xFF6A5AE0) : Colors.grey[400],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      item,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                        color: isSelected ? const Color(0xFF6A5AE0) : Colors.black87,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             );
-          }).toList(),
-          onChanged: (newValue) {
-            setState(() {
-              _selectedHead = newValue;
-            });
           },
         ),
+        dropdownBuilder: (context, selectedItem) {
+          return Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    selectedItem ?? '( Select One )',
+                    style: TextStyle(
+                      color: selectedItem == null ? Colors.white70 : Colors.white,
+                      fontSize: selectedItem == null ? 13 : 14,
+                      fontWeight: selectedItem == null ? FontWeight.w400 : FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (selectedItem != null)
+                  const Icon(Icons.check_circle, color: Colors.white70, size: 18),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

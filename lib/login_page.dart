@@ -15,8 +15,26 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   bool _rememberMe = false;
   bool _isLoading = false;
+  bool _obscurePassword = true;
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStoredCredentials();
+  }
+
+  Future<void> _loadStoredCredentials() async {
+    final credentials = await SessionManager.getStoredCredentials();
+    if (credentials != null && mounted) {
+      setState(() {
+        _usernameController.text = credentials['phone']!;
+        _passwordController.text = credentials['password']!;
+        _rememberMe = true;
+      });
+    }
+  }
 
   Future<void> _handleLogin() async {
     final identifier = _usernameController.text.trim();
@@ -56,7 +74,14 @@ class _LoginPageState extends State<LoginPage> {
             orgId: orgId is int ? orgId : int.parse(orgId.toString()),
             userId: userId is int ? userId : int.parse(userId.toString()),
             token: token,
+            rememberMe: _rememberMe,
+            phone: _usernameController.text.trim(),
+            password: _passwordController.text.trim(),
           );
+
+          // Save user and menu data for auto-login
+          await SessionManager.saveUserData(userData);
+          await SessionManager.saveMenuData(menuData);
 
           // Navigate to DashboardPage for all successful logins with dynamic menu
           if (mounted) {
@@ -205,13 +230,25 @@ class _LoginPageState extends State<LoginPage> {
                                     const SizedBox(height: 6),
                                     TextField(
                                       controller: _passwordController,
-                                      obscureText: true,
-                                      decoration: const InputDecoration(
+                                      obscureText: _obscurePassword,
+                                      decoration: InputDecoration(
                                         isDense: true,
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                        border: OutlineInputBorder(),
-                                        focusedBorder: OutlineInputBorder(
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        border: const OutlineInputBorder(),
+                                        focusedBorder: const OutlineInputBorder(
                                           borderSide: BorderSide(color: Color(0xFF2299CC)),
+                                        ),
+                                        suffixIcon: IconButton(
+                                          icon: Icon(
+                                            _obscurePassword ? Icons.visibility_off : Icons.remove_red_eye,
+                                            size: 20,
+                                            color: Colors.grey,
+                                          ),
+                                          onPressed: () {
+                                            setState(() {
+                                              _obscurePassword = !_obscurePassword;
+                                            });
+                                          },
                                         ),
                                       ),
                                     ),
@@ -223,6 +260,9 @@ class _LoginPageState extends State<LoginPage> {
                                           onTap: () {
                                             setState(() {
                                               _rememberMe = !_rememberMe;
+                                              if (!_rememberMe) {
+                                                SessionManager.clearStoredCredentials();
+                                              }
                                             });
                                           },
                                           child: Row(
@@ -235,6 +275,9 @@ class _LoginPageState extends State<LoginPage> {
                                                   onChanged: (val) {
                                                     setState(() {
                                                       _rememberMe = val!;
+                                                      if (!_rememberMe) {
+                                                        SessionManager.clearStoredCredentials();
+                                                      }
                                                     });
                                                   },
                                                 ),
@@ -247,21 +290,42 @@ class _LoginPageState extends State<LoginPage> {
                                             ],
                                           ),
                                         ),
-                                        GestureDetector(
-                                          onTap: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(builder: (context) => const EmployeePanel()),
-                                            );
-                                          },
-                                          child: const Text(
-                                            'Employee',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: Color(0xFF2299CC),
-                                              decoration: TextDecoration.underline,
+                                        Row(
+                                          children: [
+                                            GestureDetector(
+                                              onTap: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(builder: (context) => const EmployeePanel()),
+                                                );
+                                              },
+                                              child: const Text(
+                                                'Employee',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: Color(0xFF2299CC),
+                                                  decoration: TextDecoration.underline,
+                                                ),
+                                              ),
                                             ),
-                                          ),
+                                            const SizedBox(width: 16),
+                                            GestureDetector(
+                                              onTap: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(builder: (context) => const LeaveApplicationPage()),
+                                                );
+                                              },
+                                              child: const Text(
+                                                'Apply',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: Color(0xFF2299CC),
+                                                  decoration: TextDecoration.underline,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),

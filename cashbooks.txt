@@ -1,0 +1,572 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+
+class CashBook extends CI_Controller {
+
+    public function __construct() {
+        parent::__construct();
+        header("Content-Type: application/json");
+    }
+
+    public function list() {
+
+        header("Content-Type: application/json");
+
+        /*
+        |--------------------------------------------------------------------------
+        | Get Request Data
+        |--------------------------------------------------------------------------
+        */
+
+        $orgID = $this->input->get_post('orgID');
+        $start = $this->input->get_post('start');
+        $end   = $this->input->get_post('end');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Validation
+        |--------------------------------------------------------------------------
+        */
+
+        if (!$orgID) {
+            echo json_encode([
+                'status' => false,
+                'message' => 'orgID is required'
+            ]);
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Default Date
+        |--------------------------------------------------------------------------
+        */
+
+        if (!$start) {
+            $start = date('Y-m-d');
+        }
+
+        if (!$end) {
+            $end = date('Y-m-d');
+        }
+
+        // Full datetime format
+        $startDate = $start . ' 00:00:00';
+        $endDate   = $end . ' 23:59:59';
+
+        /*
+        |--------------------------------------------------------------------------
+        | Opening Cash Balance
+        |--------------------------------------------------------------------------
+        */
+
+        $accOpenCash = $this->db->query("
+            SELECT 
+                SUM(c.amount) as amount
+            FROM z_acc_opening_balance c
+            WHERE c.orgID = ?
+        ", [$orgID])->row();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Previous Income Before Start Date
+        |--------------------------------------------------------------------------
+        */
+
+        $accOpenIncome = $this->db->query("
+            SELECT 
+                SUM(i.incomeAmount) as amount
+            FROM z_acc_income i
+            WHERE i.date < ?
+            AND i.orgID = ?
+        ", [$startDate, $orgID])->row();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Previous Expense Before Start Date
+        |--------------------------------------------------------------------------
+        */
+
+        $accOpenExpense = $this->db->query("
+            SELECT 
+                SUM(e.expenseAmount) as amount
+            FROM z_acc_expense e
+            WHERE e.date < ?
+            AND e.orgID = ?
+        ", [$startDate, $orgID])->row();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Opening Balance Calculation
+        |--------------------------------------------------------------------------
+        */
+
+        $openingCash    = $accOpenCash->amount ?? 0;
+        $openingIncome  = $accOpenIncome->amount ?? 0;
+        $openingExpense = $accOpenExpense->amount ?? 0;
+
+        $openingBalance =
+            ($openingCash + $openingIncome)
+            - $openingExpense;
+
+        /*
+        |--------------------------------------------------------------------------
+        | Income Summary
+        |--------------------------------------------------------------------------
+        */
+
+        $incomeSummary = $this->db->query("
+            SELECT 
+                i.incomeType,
+                (
+                    SELECT t.categoryName 
+                    FROM z_acc_chart t 
+                    WHERE i.incomeType = t.id
+                ) as head,
+                SUM(i.incomeAmount) as amount
+            FROM z_acc_income i
+            WHERE i.date >= ?
+            AND i.date <= ?
+            AND i.orgID = ?
+            GROUP BY i.incomeType
+            ORDER BY i.incomeType ASC
+        ", [$startDate, $endDate, $orgID])->result();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Expense Summary
+        |--------------------------------------------------------------------------
+        */
+
+        $expenseSummary = $this->db->query("
+            SELECT 
+                e.expenseType,
+                (
+                    SELECT t.categoryName 
+                    FROM z_acc_chart t 
+                    WHERE e.expenseType = t.id
+                ) as head,
+                SUM(e.expenseAmount) as amount
+            FROM z_acc_expense e
+            WHERE e.date >= ?
+            AND e.date <= ?
+            AND e.orgID = ?
+            GROUP BY e.expenseType
+            ORDER BY e.expenseType ASC
+        ", [$startDate, $endDate, $orgID])->result();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Total Income
+        |--------------------------------------------------------------------------
+        */
+
+        $totalIncomeRow = $this->db->query("
+            SELECT 
+                SUM(i.incomeAmount) as total_income
+            FROM z_acc_income i
+            WHERE i.date >= ?
+            AND i.date <= ?
+            AND i.orgID = ?
+        ", [$startDate, $endDate, $orgID])->row();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Total Expense
+        |--------------------------------------------------------------------------
+        */
+
+        $totalExpenseRow = $this->db->query("
+            SELECT 
+                SUM(e.expenseAmount) as total_expense
+            FROM z_acc_expense e
+            WHERE e.date >= ?
+            AND e.date <= ?
+            AND e.orgID = ?
+        ", [$startDate, $endDate, $orgID])->row();
+
+        $totalIncome  = $totalIncomeRow->total_income ?? 0;
+        $totalExpense = $totalExpenseRow->total_expense ?? 0;
+
+        /*
+        |--------------------------------------------------------------------------
+        | Closing Balance
+        |--------------------------------------------------------------------------
+        */
+
+        $closingBalance =
+            $openingBalance
+            + $totalIncome
+            - $totalExpense;
+
+        /*
+        |--------------------------------------------------------------------------
+        | Cashbook Transactions
+        |--------------------------------------------------------------------------
+        */
+
+        $transactions = $this->db->query("
+            SELECT 
+                'Income' as type,
+                (
+                    SELECT h.categoryName 
+                    FROM z_acc_chart h 
+                    WHERE h.id = i.incomeType
+                ) as head,
+                i.incomeAmount as amount,
+                i.comments,
+                i.date,
+                i.create_date
+            FROM z_acc_income i
+            WHERE i.orgID = ?
+            AND i.date BETWEEN ? AND ?
+
+            UNION ALL
+
+            SELECT 
+                'Expense' as type,
+                (
+                    SELECT h.categoryName 
+                    FROM z_acc_chart h 
+                    WHERE h.id = e.expenseType
+                ) as head,
+                e.expenseAmount as amount,
+                e.comments,
+                e.date,
+                e.create_date
+            FROM z_acc_expense e
+            WHERE e.orgID = ?
+            AND e.date BETWEEN ? AND ?
+
+            ORDER BY date ASC
+        ", [
+            $orgID,
+            $startDate,
+            $endDate,
+            $orgID,
+            $startDate,
+            $endDate
+        ])->result();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Final Response
+        |--------------------------------------------------------------------------
+        */
+
+        echo json_encode([
+            'status' => true,
+            'message' => 'Cash book fetched successfully',
+
+            'start' => $startDate,
+            'end' => $endDate,
+
+            'opening_cash' => $openingCash,
+            'opening_income' => $openingIncome,
+            'opening_expense' => $openingExpense,
+
+            'opening_balance' => $openingBalance,
+
+            'total_income' => $totalIncome,
+            'total_expense' => $totalExpense,
+
+            'closing_balance' => $closingBalance,
+
+            'income_summary' => $incomeSummary,
+            'expense_summary' => $expenseSummary,
+
+            'transaction_count' => count($transactions),
+            'transactions' => $transactions
+        ]);
+    }
+}
+
+
+https://bs-org.com/index.php/api/CashBook/list?orgID=106&start=2026-04-01&end=2026-05-20
+
+{
+	"status": true,
+	"message": "Cash book fetched successfully",
+	"start": "2026-05-20 00:00:00",
+	"end": "2026-05-20 23:59:59",
+	"opening_cash": 0,
+	"opening_income": "1722725",
+	"opening_expense": "1235206",
+	"opening_balance": 487519,
+	"total_income": 0,
+	"total_expense": 0,
+	"closing_balance": 487519,
+	"income_summary": [],
+	"expense_summary": [],
+	"transaction_count": 0,
+	"transactions": []
+}
+
+
+
+update result 
+
+
+{
+	"status": true,
+	"message": "Cash book fetched successfully",
+	"start": "2025-04-01 00:00:00",
+	"end": "2026-05-20 23:59:59",
+	"opening_cash": 0,
+	"opening_income": 0,
+	"opening_expense": 0,
+	"opening_balance": 0,
+	"total_income": "1722725",
+	"total_expense": "1235206",
+	"closing_balance": 487519,
+	"income_summary": [
+		{
+			"incomeType": "1730",
+			"head": "LC (Letter of Credit)",
+			"amount": "300000"
+		},
+		{
+			"incomeType": "1731",
+			"head": "Home Rent",
+			"amount": "50000"
+		},
+		{
+			"incomeType": "1755",
+			"head": "Opening Balance",
+			"amount": "122725"
+		},
+		{
+			"incomeType": "1773",
+			"head": "Withdrawall from RMS",
+			"amount": "1250000"
+		}
+	],
+	"expense_summary": [
+		{
+			"expenseType": "1737",
+			"head": "Electricity Bill",
+			"amount": "1276"
+		},
+		{
+			"expenseType": "1740",
+			"head": "Supplier Payment",
+			"amount": "900000"
+		},
+		{
+			"expenseType": "1744",
+			"head": "Staff Salary",
+			"amount": "4500"
+		},
+		{
+			"expenseType": "1757",
+			"head": "Percel of Madam",
+			"amount": "3100"
+		},
+		{
+			"expenseType": "1758",
+			"head": "Office Bazar",
+			"amount": "810"
+		},
+		{
+			"expenseType": "1759",
+			"head": "Stationary",
+			"amount": "320"
+		},
+		{
+			"expenseType": "1760",
+			"head": "Internet Bill",
+			"amount": "1500"
+		},
+		{
+			"expenseType": "1761",
+			"head": "Repair",
+			"amount": "2500"
+		},
+		{
+			"expenseType": "1762",
+			"head": "Cash Deposit to RMS",
+			"amount": "300000"
+		},
+		{
+			"expenseType": "1771",
+			"head": "Production Cost",
+			"amount": "12000"
+		},
+		{
+			"expenseType": "1772",
+			"head": "Staff Conveyance",
+			"amount": "9200"
+		}
+	],
+	"transaction_count": 21,
+	"transactions": [
+		{
+			"type": "Income",
+			"head": "Opening Balance",
+			"amount": "122725",
+			"comments": "Opening Balance of 1st May",
+			"date": "2026-04-30",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Expense",
+			"head": "Percel of Madam",
+			"amount": "3100",
+			"comments": "<br>",
+			"date": "2026-05-02",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Expense",
+			"head": "Staff Salary",
+			"amount": "1500",
+			"comments": "                                                                                            ",
+			"date": "2026-05-02",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Expense",
+			"head": "Staff Salary",
+			"amount": "2000",
+			"comments": "Salary Advance",
+			"date": "2026-05-02",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Expense",
+			"head": "Staff Salary",
+			"amount": "1000",
+			"comments": "Salary Advance",
+			"date": "2026-05-02",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Expense",
+			"head": "Stationary",
+			"amount": "320",
+			"comments": "Air Freshner",
+			"date": "2026-05-02",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Expense",
+			"head": "Office Bazar",
+			"amount": "810",
+			"comments": "<br>",
+			"date": "2026-05-02",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Expense",
+			"head": "Electricity Bill",
+			"amount": "1276",
+			"comments": "<font face=\"Arial, Verdana\"><span style=\"font-size: 12px;\">Electric Bill of April 2026 (MD Village)</span></font>",
+			"date": "2026-05-02",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Expense",
+			"head": "Internet Bill",
+			"amount": "500",
+			"comments": "                                                <font face=\"Arial, Verdana\"><span style=\"font-size: 12px;\">Internet Bill of May 2026 (MD Village)</span></font>                                            ",
+			"date": "2026-05-02",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Income",
+			"head": "Home Rent",
+			"amount": "50000",
+			"comments": "One month advance &amp; rent of April 2026",
+			"date": "2026-05-03",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Expense",
+			"head": "Repair",
+			"amount": "2500",
+			"comments": "Bashundhara flat of MD",
+			"date": "2026-05-03",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Expense",
+			"head": "Staff Conveyance",
+			"amount": "9200",
+			"comments": "                                                                                            ",
+			"date": "2026-05-03",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Expense",
+			"head": "Production Cost",
+			"amount": "12000",
+			"comments": "<font face=\"Arial, Verdana\"><span style=\"font-size: 12px;\">Sewing Thread Purchase</span></font>",
+			"date": "2026-05-03",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Expense",
+			"head": "Internet Bill",
+			"amount": "1000",
+			"comments": "<font face=\"Arial, Verdana\"><span style=\"font-size: 12px;\">Internet Bill of May 2026 (Purbachal)</span></font>",
+			"date": "2026-05-03",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Income",
+			"head": "LC (Letter of Credit)",
+			"amount": "300000",
+			"comments": "Mr. Wadud",
+			"date": "2026-05-04",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Income",
+			"head": "Withdrawall from RMS",
+			"amount": "500000",
+			"comments": "Cheque - RM AB R - 7537978",
+			"date": "2026-05-04",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Income",
+			"head": "Withdrawall from RMS",
+			"amount": "350000",
+			"comments": "",
+			"date": "2026-05-04",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Income",
+			"head": "Withdrawall from RMS",
+			"amount": "400000",
+			"comments": "Bank -&nbsp; AB R, Cheque - 7537976",
+			"date": "2026-05-04",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Expense",
+			"head": "Supplier Payment",
+			"amount": "400000",
+			"comments": "Cash paid by cheque (RM R - 7537976) of to James Design",
+			"date": "2026-05-04",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Expense",
+			"head": "Supplier Payment",
+			"amount": "500000",
+			"comments": "Cash paid by cheque (RM R - 7537976) of to James Design",
+			"date": "2026-05-04",
+			"create_date": "2026-05-19"
+		},
+		{
+			"type": "Expense",
+			"head": "Cash Deposit to RMS",
+			"amount": "300000",
+			"comments": "<br>",
+			"date": "2026-05-04",
+			"create_date": "2026-05-19"
+		}
+	]
+}

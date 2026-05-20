@@ -773,6 +773,7 @@ class _EmployeeDashboardState extends State<EmployeeDashboard> {
   Map<String, dynamic>? _dashboardData;
   bool _isLoading = false;
   String? _error;
+  double _cashInHand = 0.0;
 
   @override
   void initState() {
@@ -797,6 +798,9 @@ class _EmployeeDashboardState extends State<EmployeeDashboard> {
         });
         return;
       }
+
+      // Also fetch Cashbook data for Cash in Hand
+      await _fetchCashInHand(orgId);
 
       final url = Uri.parse(
         'https://www.bs-org.com/index.php/api/AccountDashboard/getDashboard?orgID=$orgId',
@@ -837,6 +841,45 @@ class _EmployeeDashboardState extends State<EmployeeDashboard> {
         _error = 'Error: $e';
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _fetchCashInHand(dynamic orgId) async {
+    try {
+      final now = DateTime.now();
+      final startStr = DateFormat('yyyy-MM-01').format(now);
+      final endStr = DateFormat('yyyy-MM-dd').format(now);
+
+      final url =
+          'https://bs-org.com/index.php/api/CashBook/list?orgID=$orgId&start=$startStr&end=$endStr';
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == true) {
+          double openingBalance =
+              double.tryParse(data['opening_balance']?.toString() ?? '0') ??
+              0.0;
+          List incomeList = data['income_summary'] as List<dynamic>? ?? [];
+          List expenseList = data['expense_summary'] as List<dynamic>? ?? [];
+
+          double totalIncome = incomeList.fold(0.0, (sum, item) {
+            final amt =
+                (item['incomeAmount'] ?? item['amount'] ?? '0').toString();
+            return sum + (double.tryParse(amt) ?? 0.0);
+          });
+
+          double totalExpense = expenseList.fold(0.0, (sum, item) {
+            final amt =
+                (item['expenseAmount'] ?? item['amount'] ?? '0').toString();
+            return sum + (double.tryParse(amt) ?? 0.0);
+          });
+
+          _cashInHand = (totalIncome + openingBalance) - totalExpense;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching cash in hand: $e');
     }
   }
 
@@ -962,6 +1005,15 @@ class _EmployeeDashboardState extends State<EmployeeDashboard> {
     final formattedReceiveAmt = formatAmount(receiveAmtRaw);
 
     final List<Map<String, dynamic>> items = [
+      {
+        'title': 'Cash in Hand',
+        'val': '',
+        'amt': '৳ ${NumberFormat('#,##0.00').format(_cashInHand)}',
+        'color': const Color(0xFFfee8e8),
+        'btn': 'btn-red',
+        'btnText': '✔ View Cashbook',
+        'link': 'accounts/cashbook',
+      },
       {
         'title': 'Payment || Year-2026',
         'val': paymentCount,
